@@ -45,6 +45,10 @@ interface BatAdsClient {
   GetAdsSubdivisionTargetingCode() => (string subdivision_targeting_code);
   [Sync]
   GetAutomaticallyDetectedAdsSubdivisionTargetingCode() => (string subdivision_targeting_code);
+  [Sync]
+  GetPath() => (string path);
+  [Sync]
+  GetUserModelFilePath(string model_id) => (string path);
 
   SetAllowAdsSubdivisionTargeting(bool should_allow);
   SetAdsSubdivisionTargetingCode(string subdivision_targeting_code);
@@ -91,4 +95,5 @@ interface BatAds {
   ToggleAdOptOutAction(string category, int32 action) => (string category, int32 action);
   ToggleSaveAd(string creative_instance_id, string creative_set_id, bool saved) => (string creative_instance_id, bool saved);
   ToggleFlagAd(string creative_instance_id, string creative_set_id, bool flagged) => (string creative_instance_id, bool flagged);
+  OnUserModelFilesUpdated(string model_id, string model_path);
 };

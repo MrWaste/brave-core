@@ -97,9 +97,7 @@ AdsImpl::AdsImpl(AdsClient* ads_client)
       ad_conversions_(std::make_unique<AdConversions>(
           this, ads_client, client_.get())),
       page_classifier_(std::make_unique<PageClassifier>(this)),
-      purchase_intent_classifier_(std::make_unique<PurchaseIntentClassifier>(
-          kPurchaseIntentSignalLevel, kPurchaseIntentClassificationThreshold,
-              kPurchaseIntentSignalDecayTimeWindow)),
+      purchase_intent_classifier_(std::make_unique<PurchaseIntentClassifier>()),
       is_initialized_(false),
       is_confirmations_ready_(false),
       ad_notifications_(std::make_unique<AdNotifications>(this, ads_client)),
@@ -308,6 +306,29 @@ void AdsImpl::OnUserModelLoaded(
   if (!IsInitialized()) {
     InitializeStep5(SUCCESS);
   }
+}
+
+void AdsImpl::LoadPurchaseIntentClassifier() {
+  std::string path = ads_client_->GetUserModelFilePath(
+      kPurchaseIntentClassifierId);
+  auto callback = std::bind(
+      &AdsImpl::OnPurchaseIntentClassifierLoaded, this, _1, _2);
+  ads_client_->Load(path, callback);
+}
+
+void AdsImpl::OnPurchaseIntentClassifierLoaded(
+    const Result result,
+    const std::string& json) {
+  if (result != SUCCESS) {
+    BLOG(0, "Failed to load purchase intent model update");
+    return;
+  }
+
+  purchase_intent_classifier_.reset(new PurchaseIntentClassifier());
+  purchase_intent_classifier_->Initialize(json);
+
+  BLOG(3, "Successfully loaded and initialized purchase intent model");
+  return;
 }
 
 bool AdsImpl::IsMobile() const {
@@ -625,6 +646,17 @@ void AdsImpl::ChangeLocale(
   }
 
   LoadUserModel();
+  LoadPurchaseIntentClassifier();
+}
+
+void AdsImpl::OnUserModelFilesUpdated(
+    const std::string& model_id,
+    const std::string& model_path) {
+  if (model_id == kPurchaseIntentClassifierId) {
+    auto callback = std::bind(
+        &AdsImpl::OnPurchaseIntentClassifierLoaded, this, _1, _2);
+    ads_client_->Load(model_path, callback);
+  }
 }
 
 void AdsImpl::OnAdsSubdivisionTargetingCodeHasChanged() {

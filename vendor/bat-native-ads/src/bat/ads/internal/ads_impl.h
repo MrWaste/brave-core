@@ -75,7 +75,13 @@ class AdsImpl : public Ads {
   void OnUserModelLoaded(
       const Result result,
       const std::string& json);
-
+  void OnUserModelFilesUpdated(
+      const std::string& model_id,
+      const std::string& model_path) override;
+  void LoadPurchaseIntentClassifier();
+  void OnPurchaseIntentClassifierLoaded(
+      const Result result,
+      const std::string& json);
   bool IsMobile() const;
   bool IsAndroid() const;
 
