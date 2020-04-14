@@ -1,13 +1,13 @@
-/* Copyright (c) 2019 The Brave Authors. All rights reserved.
+/* Copyright (c) 2020 The Brave Authors. All rights reserved.
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "brave/components/brave_rewards/browser/test/rewards_browsertest_utils.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_util.h"
 
 #include "content/public/test/browser_test_utils.h"
 
-namespace rewards_browsertest_utils {
+namespace rewards_browsertest_util {
 
 static const char kWaitForElementToAppearScript[] = R"(
     const waitForElementToAppear = (selector) => {
@@ -408,4 +408,48 @@ void IsMediaTipsInjected(content::WebContents* context, bool should_appear) {
   WaitForElementToAppear(context, ".action-brave-tip", should_appear);
 }
 
-}  // namespace rewards_browsertest_utils
+std::vector<double> GetSiteBannerTipOptions(content::WebContents* site_banner) {
+  DCHECK(site_banner);
+  WaitForElementToAppear(site_banner, "[data-test-id=amount-wrapper] div span");
+  auto options = content::EvalJs(
+      site_banner,
+      R"(
+          const delay = t => new Promise(resolve => setTimeout(resolve, t));
+          delay(500).then(() => Array.prototype.map.call(
+              document.querySelectorAll(
+                  "[data-test-id=amount-wrapper] div span"),
+              node => parseFloat(node.innerText)))
+      )",
+      content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+      content::ISOLATED_WORLD_ID_CONTENT_END).ExtractList();
+
+  std::vector<double> result;
+  for (const auto& value : options.GetList()) {
+    result.push_back(value.GetDouble());
+  }
+  return result;
+}
+
+std::vector<double> GetRewardsPopupTipOptions(content::WebContents* popup) {
+  DCHECK(popup);
+  WaitForElementToAppear(popup, "option:not(:disabled)");
+  auto options = content::EvalJs(
+      popup,
+      R"_(
+        const delay = t => new Promise(resolve => setTimeout(resolve, t));
+        delay(0).then(() =>
+            Array.prototype.map.call(
+                document.querySelectorAll("option:not(:disabled)"),
+                node => parseFloat(node.value)))
+      )_",
+      content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+      content::ISOLATED_WORLD_ID_CONTENT_END).ExtractList();
+
+  std::vector<double> result;
+  for (const auto& value : options.GetList()) {
+    result.push_back(value.GetDouble());
+  }
+  return result;
+}
+
+}  // namespace rewards_browsertest_util
