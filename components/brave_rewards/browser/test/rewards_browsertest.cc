@@ -32,6 +32,7 @@
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_helper.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_util.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_network_util.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_response.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "brave/components/brave_rewards/common/pref_names.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -45,26 +46,10 @@
 
 // npm run test -- brave_browser_tests --filter=RewardsBrowserTest.*
 
-using braveledger_request_util::ServerTypes;
+namespace rewards_browsertest {
 
 using RewardsNotificationType =
     brave_rewards::RewardsNotificationService::RewardsNotificationType;
-
-namespace brave_test_resp {
-  std::string registrarVK_;
-  std::string verification_;
-  std::string promotions_;
-  std::string promotion_empty_key_;
-  std::string promotion_claim_;
-  std::string creds_tokens_;
-  std::string creds_tokens_prod_;
-  std::string captcha_;
-  std::string balance_;
-  std::string parameters_;
-  std::string uphold_auth_resp_;
-  std::string uphold_transactions_resp_;
-  std::string uphold_commit_resp_;
-}  // namespace brave_test_resp
 
 class RewardsBrowserTest
     : public InProcessBrowserTest,
@@ -74,6 +59,7 @@ class RewardsBrowserTest
  public:
   RewardsBrowserTest() {
     // You can do set-up work for each test here
+    response_ = std::make_unique<RewardsBrowserTestResponse>();
   }
 
   ~RewardsBrowserTest() override {
@@ -97,7 +83,8 @@ class RewardsBrowserTest
     ASSERT_TRUE(https_server_->Start());
 
     brave::RegisterPathProvider();
-    ReadTestData();
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    response_->LoadMocks();
 
     auto* browser_profile = browser()->profile();
 
@@ -152,126 +139,12 @@ class RewardsBrowserTest
       int* response_status_code,
       std::string* response,
       std::map<std::string, std::string>* headers) {
-    DCHECK(response_status_code && response && headers);
-
-    request_made_ = true;
-    std::vector<std::string> tmp = base::SplitString(
+    response_->SetExternalBalance(GetExternalBalance());
+    response_->Get(
         url,
-        "/",
-        base::TRIM_WHITESPACE,
-        base::SPLIT_WANT_ALL);
-    const std::string persona_url =
-        braveledger_request_util::BuildUrl(REGISTER_PERSONA, PREFIX_V2);
-    if (url.find(persona_url) == 0 && tmp.size() == 6) {
-      *response = brave_test_resp::registrarVK_;
-    } else if (rewards_browsertest_util::URLMatches(url, REGISTER_PERSONA, PREFIX_V2,
-                          ServerTypes::LEDGER) &&
-               tmp.size() == 7) {
-      *response = brave_test_resp::verification_;
-    } else if (rewards_browsertest_util::URLMatches(url, "/wallet/", PREFIX_V2, ServerTypes::BALANCE)) {
-       *response = brave_test_resp::balance_;
-    }  else if (rewards_browsertest_util::URLMatches(url, "/parameters", PREFIX_V1, ServerTypes::kAPI)) {
-        *response = brave_test_resp::parameters_;
-    } else if (rewards_browsertest_util::URLMatches(url, "/promotions?", PREFIX_V1,
-                          ServerTypes::kPromotion)) {
-      if (promotion_empty_key_) {
-        *response = brave_test_resp::promotion_empty_key_;
-      } else {
-        *response = brave_test_resp::promotions_;
-      }
-    } else if (rewards_browsertest_util::URLMatches(url, "/promotions/", PREFIX_V1,
-                          ServerTypes::kPromotion)) {
-      if (url.find("claims") != std::string::npos) {
-        *response = brave_test_resp::creds_tokens_;
-      } else {
-        *response = brave_test_resp::promotion_claim_;
-      }
-    } else if (rewards_browsertest_util::URLMatches(url, "/captchas", PREFIX_V1,
-                          ServerTypes::kPromotion)) {
-      *response = brave_test_resp::captcha_;
-    } else if (rewards_browsertest_util::URLMatches(url, "/api/v3/public/channels", "",
-                          ServerTypes::kPublisher)) {
-      if (alter_publisher_list_) {
-        *response =
-            "["
-            "[\"bumpsmack.com\",\"publisher_verified\",false,\"address1\",{}],"
-            "[\"duckduckgo.com\",\"wallet_connected\",false,\"address2\",{}],"
-            "[\"laurenwags.github.io\",\"wallet_connected\",false,\"address2\","
-              "{\"donationAmounts\": [5,10,20]}]"
-            "]";
-      } else {
-        *response =
-            "["
-            "[\"bumpsmack.com\",\"publisher_verified\",false,\"address1\",{}],"
-            "[\"duckduckgo.com\",\"wallet_connected\",false,\"address2\",{}],"
-            "[\"3zsistemi.si\",\"wallet_connected\",false,\"address3\",{}],"
-            "[\"site1.com\",\"wallet_connected\",false,\"address4\",{}],"
-            "[\"site2.com\",\"wallet_connected\",false,\"address5\",{}],"
-            "[\"site3.com\",\"wallet_connected\",false,\"address6\",{}],"
-            "[\"laurenwags.github.io\",\"wallet_connected\",false,\"address2\","
-              "{\"donationAmounts\": [5,10,20]}],"
-            "[\"kjozwiakstaging.github.io\",\"wallet_connected\",false,\"aa\","
-              "{\"donationAmounts\": [5,50,100]}]"
-            "]";
-      }
-
-      // we only have one page in this mock, so next page should return end
-      if (url.find("page=2") != std::string::npos) {
-        *response_status_code = net::HTTP_NO_CONTENT;
-      }
-    } else if (base::StartsWith(
-        url,
-        braveledger_uphold::GetAPIUrl("/oauth2/token"),
-        base::CompareCase::INSENSITIVE_ASCII)) {
-      *response = brave_test_resp::uphold_auth_resp_;
-    } else if (base::StartsWith(
-        url,
-        braveledger_uphold::GetAPIUrl("/v0/me/cards"),
-        base::CompareCase::INSENSITIVE_ASCII)) {
-      if (base::EndsWith(
-          url,
-          "transactions",
-          base::CompareCase::INSENSITIVE_ASCII)) {
-        *response = brave_test_resp::uphold_transactions_resp_;
-        *response_status_code = net::HTTP_ACCEPTED;
-      } else if (base::EndsWith(
-          url,
-          "commit",
-          base::CompareCase::INSENSITIVE_ASCII)) {
-        *response = brave_test_resp::uphold_commit_resp_;
-      } else {
-        *response = rewards_browsertest_util::GetUpholdCard(
-            GetExternalBalance(),
-            external_wallet_address_);
-      }
-    } else if (base::StartsWith(
-        url,
-        braveledger_uphold::GetAPIUrl("/v0/me"),
-        base::CompareCase::INSENSITIVE_ASCII)) {
-      *response = rewards_browsertest_util::GetUpholdUser(verified_wallet_);
-    } else if (rewards_browsertest_util::URLMatches(
-        url,
-        "/order",
-        PREFIX_V1,
-        ServerTypes::kPayments)) {
-      if (url.find("credentials") != std::string::npos) {
-        if (method == 0) {
-          #if defined(OFFICIAL_BUILD)
-            *response = brave_test_resp::creds_tokens_prod_;
-          #else
-            *response = brave_test_resp::creds_tokens_;
-          #endif
-
-          return;
-        }
-        return;
-      } else if (url.find("transaction") == std::string::npos) {
-        *response = rewards_browsertest_util::GetOrderCreateResponse(
-            sku_order_->Clone());
-      }
-
-      *response_status_code = net::HTTP_CREATED;
-    }
+        method,
+        response_status_code,
+        response);
   }
 
   void WaitForWalletInitialization() {
@@ -420,7 +293,7 @@ class RewardsBrowserTest
     BraveLocationBarView* brave_location_bar_view =
         static_cast<BraveLocationBarView*>(browser_view->GetLocationBarView());
     ASSERT_NE(brave_location_bar_view, nullptr);
-    auto* brave_actions = brave_location_bar_view->brave_actions_;
+    auto* brave_actions = brave_location_bar_view->GetBraveActionsContainer();
     ASSERT_NE(brave_actions, nullptr);
 
     brave_actions->OnRewardsStubButtonClicked();
@@ -460,50 +333,6 @@ class RewardsBrowserTest
         "[data-test-id='rewards-panel']");
 
     return popup_contents;
-  }
-
-  void ReadTestData() {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    base::FilePath path;
-    rewards_browsertest_util::GetTestDataDir(&path);
-    ASSERT_TRUE(
-        base::ReadFileToString(path.AppendASCII("register_persona_resp.json"),
-                               &brave_test_resp::registrarVK_));
-    ASSERT_TRUE(
-        base::ReadFileToString(path.AppendASCII("verify_persona_resp.json"),
-                               &brave_test_resp::verification_));
-
-    ASSERT_TRUE(base::ReadFileToString(path.AppendASCII("promotions_resp.json"),
-                                       &brave_test_resp::promotions_));
-
-    ASSERT_TRUE(base::ReadFileToString(
-        path.AppendASCII("promotion_empty_key_resp.json"),
-        &brave_test_resp::promotion_empty_key_));
-
-    ASSERT_TRUE(base::ReadFileToString(path.AppendASCII("captcha_resp.json"),
-                                       &brave_test_resp::captcha_));
-    ASSERT_TRUE(
-        base::ReadFileToString(path.AppendASCII("promotion_claim_resp.json"),
-                               &brave_test_resp::promotion_claim_));
-    ASSERT_TRUE(
-        base::ReadFileToString(path.AppendASCII("creds_tokens_resp.json"),
-                               &brave_test_resp::creds_tokens_));
-    ASSERT_TRUE(
-        base::ReadFileToString(path.AppendASCII("creds_tokens_prod_resp.json"),
-                               &brave_test_resp::creds_tokens_prod_));
-    ASSERT_TRUE(base::ReadFileToString(path.AppendASCII("parameters_resp.json"),
-                               &brave_test_resp::parameters_));
-    ASSERT_TRUE(base::ReadFileToString(path.AppendASCII("balance_resp.json"),
-        &brave_test_resp::balance_));
-    ASSERT_TRUE(base::ReadFileToString(
-        path.AppendASCII("uphold_auth_resp.json"),
-        &brave_test_resp::uphold_auth_resp_));
-    ASSERT_TRUE(base::ReadFileToString(
-        path.AppendASCII("uphold_transactions_resp.json"),
-        &brave_test_resp::uphold_transactions_resp_));
-    ASSERT_TRUE(base::ReadFileToString(
-        path.AppendASCII("uphold_commit_resp.json"),
-        &brave_test_resp::uphold_commit_resp_));
   }
 
   void UpdateContributionBalance(
@@ -1175,11 +1004,17 @@ class RewardsBrowserTest
       const double balance,
       const ledger::WalletStatus status = ledger::WalletStatus::VERIFIED) {
     verified_wallet_ = true;
+    response_->SetVerifiedWallet(true);
     external_balance_ = balance;
+
+    const std::string external_wallet_address =
+      "abe5f454-fedd-4ea9-9203-470ae7315bb3";
+
+    response_->SetUpholdAddress(external_wallet_address);
 
     auto wallet = ledger::ExternalWallet::New();
     wallet->token = "token";
-    wallet->address = external_wallet_address_;
+    wallet->address = external_wallet_address;
     wallet->status = status;
     wallet->one_time_string = "";
     wallet->user_name = "Brave Test";
@@ -1191,6 +1026,8 @@ class RewardsBrowserTest
   MOCK_METHOD1(OnGetDebug, void(bool));
   MOCK_METHOD1(OnGetReconcileInterval, void(int32_t));
   MOCK_METHOD1(OnGetShortRetries, void(bool));
+
+  std::unique_ptr<RewardsBrowserTestResponse> response_;
 
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
 
@@ -1241,20 +1078,13 @@ class RewardsBrowserTest
 
   std::unique_ptr<base::RunLoop> wait_for_attestation_loop_;
 
-  ledger::SKUOrderPtr sku_order_ = nullptr;
-
   bool last_publisher_added_ = false;
-  bool alter_publisher_list_ = false;
   bool show_defaults_in_properties_ = false;
-  bool request_made_ = false;
   double balance_ = 0;
   double reconciled_tip_total_ = 0;
   double pending_balance_ = 0;
   double external_balance_ = 0;
   bool verified_wallet_ = false;
-  bool promotion_empty_key_ = false;
-  const std::string external_wallet_address_ =
-      "abe5f454-fedd-4ea9-9203-470ae7315bb3";
 };
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, RenderWelcome) {
@@ -1683,7 +1513,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
   order->merchant_id = "";
   order->location = "brave.com";
   order->items = std::move(items);
-  sku_order_ = std::move(order);
+  response_->SetSKUOrder(std::move(order));
 
   // Visit verified publisher
   const bool verified = true;
@@ -2115,7 +1945,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PrefsTestInPrivateWindow) {
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
   AddNotificationServiceObserver();
 
-  alter_publisher_list_ = true;
+  response_->SetAlternativePublisherList(true);
 
   EnableRewards();
 
@@ -2132,7 +1962,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
 
   ClaimPromotionViaCode();
 
-  alter_publisher_list_ = false;
+  response_->SetAlternativePublisherList(false);
   VerifyTip(41.0, false, false, true);
 
   // Visit publisher
@@ -2586,7 +2416,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDontDoRequests) {
   ASSERT_TRUE(popup_contents);
 
   // Make sure that no request was made
-  ASSERT_FALSE(request_made_);
+  ASSERT_FALSE(response_->WasRequestMade());
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowMonthlyIfACOff) {
@@ -2658,7 +2488,7 @@ IN_PROC_BROWSER_TEST_F(
   order->merchant_id = "";
   order->location = "brave.com";
   order->items = std::move(items);
-  sku_order_ = std::move(order);
+  response_->SetSKUOrder(std::move(order));
 
   // Trigger contribution process
   rewards_service()->StartMonthlyContributionForTest();
@@ -2696,7 +2526,7 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     RewardsBrowserTest,
     PromotionHasEmptyPublicKey) {
-  promotion_empty_key_ = true;
+  response_->SetPromotionEmptyKey(true);
   EnableRewards();
 
   WaitForPromotionInitialization();
