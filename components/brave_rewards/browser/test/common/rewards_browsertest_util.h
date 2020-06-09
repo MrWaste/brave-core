@@ -10,12 +10,17 @@
 
 #include "base/files/file_path.h"
 #include "bat/ledger/internal/request/request_util.h"
+#include "chrome/browser/ui/browser.h"
 
 namespace rewards_browsertest_util {
 
 enum class ContributionType { OneTimeTip, MonthlyTip };
 
 void GetTestDataDir(base::FilePath* test_data_dir);
+
+double IsRewardsEnabled(Browser* browser, const bool private_window = false);
+
+void RunUntilIdle();
 
 }  // namespace rewards_browsertest_util
 

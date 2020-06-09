@@ -32,6 +32,7 @@
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_helper.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_util.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_network_util.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_promotion.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_response.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "brave/components/brave_rewards/common/pref_names.h"
@@ -60,6 +61,7 @@ class RewardsBrowserTest
   RewardsBrowserTest() {
     // You can do set-up work for each test here
     response_ = std::make_unique<RewardsBrowserTestResponse>();
+    promotion_ = std::make_unique<RewardsBrowserTestPromotion>();
   }
 
   ~RewardsBrowserTest() override {
@@ -98,6 +100,8 @@ class RewardsBrowserTest
       WaitForWalletInitialization();
     }
     rewards_service_->SetLedgerEnvForTesting();
+
+    promotion_->Initialize(browser(), rewards_service_);
   }
 
   void TearDown() override {
@@ -114,23 +118,6 @@ class RewardsBrowserTest
 
   net::EmbeddedTestServer* https_server() {
     return https_server_.get();
-  }
-
-  void RunUntilIdle() {
-    base::RunLoop loop;
-    loop.RunUntilIdle();
-  }
-
-  PrefService* GetPrefs() const {
-    return browser()->profile()->GetPrefs();
-  }
-
-  bool IsRewardsEnabled() const {
-    return GetPrefs()->GetBoolean(brave_rewards::prefs::kBraveRewardsEnabled);
-  }
-
-  std::string GetPromotionId() {
-    return "6820f6a4-c6ef-481d-879c-d2c30c8928c3";
   }
 
   void GetTestResponse(
@@ -152,20 +139,6 @@ class RewardsBrowserTest
       return;
     wait_for_wallet_initialization_loop_.reset(new base::RunLoop);
     wait_for_wallet_initialization_loop_->Run();
-  }
-
-  void WaitForPromotionInitialization() {
-    if (promotion_initialized_)
-      return;
-    wait_for_promotion_initialization_loop_.reset(new base::RunLoop);
-    wait_for_promotion_initialization_loop_->Run();
-  }
-
-  void WaitForPromotionFinished() {
-    if (promotion_finished_)
-      return;
-    wait_for_promotion_finished_loop_.reset(new base::RunLoop);
-    wait_for_promotion_finished_loop_->Run();
   }
 
   void WaitForPublisherListNormalized() {
@@ -276,65 +249,6 @@ class RewardsBrowserTest
           base::Unretained(this)));
   }
 
-  void OpenRewardsPopupRewardsEnabled() const {
-    // Ask the popup to open
-    std::string error;
-    bool popup_shown = extensions::BraveActionAPI::ShowActionUI(
-      browser(), brave_rewards_extension_id, nullptr, &error);
-    if (!popup_shown) {
-      LOG(ERROR) << "Could not open rewards popup: " << error;
-    }
-    EXPECT_TRUE(popup_shown);
-  }
-
-  void OpenRewardsPopupRewardsDisabled() const {
-    BrowserView* browser_view =
-      BrowserView::GetBrowserViewForBrowser(browser());
-    BraveLocationBarView* brave_location_bar_view =
-        static_cast<BraveLocationBarView*>(browser_view->GetLocationBarView());
-    ASSERT_NE(brave_location_bar_view, nullptr);
-    auto* brave_actions = brave_location_bar_view->GetBraveActionsContainer();
-    ASSERT_NE(brave_actions, nullptr);
-
-    brave_actions->OnRewardsStubButtonClicked();
-  }
-
-  content::WebContents* OpenRewardsPopup() const {
-    // Construct an observer to wait for the popup to load
-    content::WebContents* popup_contents = nullptr;
-    auto check_load_is_rewards_panel =
-        [&](const content::NotificationSource& source,
-            const content::NotificationDetails&) -> bool {
-          auto web_contents_source =
-              static_cast<const content::Source<content::WebContents>&>(source);
-          popup_contents = web_contents_source.ptr();
-
-          // Check that this notification is for the Rewards panel and not, say,
-          // the extension background page.
-          std::string url = popup_contents->GetLastCommittedURL().spec();
-          std::string rewards_panel_url = std::string("chrome-extension://") +
-              brave_rewards_extension_id + "/brave_rewards_panel.html";
-          return url == rewards_panel_url;
-        };
-     content::WindowedNotificationObserver popup_observer(
-         content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
-         base::BindLambdaForTesting(check_load_is_rewards_panel));
-
-    if (IsRewardsEnabled()) {
-      OpenRewardsPopupRewardsEnabled();
-    } else {
-      OpenRewardsPopupRewardsDisabled();
-    }
-
-    // Wait for the popup to load
-    popup_observer.Wait();
-    rewards_browsertest_util::WaitForElementToAppear(
-        popup_contents,
-        "[data-test-id='rewards-panel']");
-
-    return popup_contents;
-  }
-
   void UpdateContributionBalance(
       double amount,
       bool verified = false,
@@ -425,90 +339,11 @@ class RewardsBrowserTest
     run_loop.Run();
 
     ASSERT_TRUE(wallet_created);
-    ASSERT_TRUE(IsRewardsEnabled());
+    ASSERT_TRUE(rewards_browsertest_util::IsRewardsEnabled(browser()));
   }
 
   brave_rewards::RewardsServiceImpl* rewards_service() {
     return rewards_service_;
-  }
-
-  // Use this function only if you are testing claim flow
-  // otherwise always use ClaimPromotionViaCode to seep things up
-  void ClaimPromotion(bool use_panel) {
-    // Wait for promotion to initialize
-    WaitForPromotionInitialization();
-
-    // Use the appropriate WebContents
-    content::WebContents *contents =
-        use_panel ? OpenRewardsPopup() : RewardsBrowserTest::contents();
-    ASSERT_TRUE(contents);
-
-    // Claim promotion via settings page or panel, as instructed
-    if (use_panel) {
-      rewards_browsertest_util::WaitForElementThenClick(
-          contents,
-          "button");
-    } else {
-      rewards_browsertest_util::WaitForElementThenClick(
-          contents,
-          "[data-test-id='claimGrant']");
-    }
-
-    // Wait for CAPTCHA
-    rewards_browsertest_util::WaitForElementToAppear(
-        contents,
-        "[data-test-id='captcha']");
-
-    rewards_browsertest_util::DragAndDrop(
-        contents,
-        "[data-test-id=\"captcha-triangle\"]",
-        "[data-test-id=\"captcha-drop\"]");
-
-    WaitForPromotionFinished();
-
-    // Ensure that promotion looks as expected
-    EXPECT_STREQ(std::to_string(promotion_.amount).c_str(), "30.000000");
-    EXPECT_STREQ(promotion_.promotion_id.c_str(), GetPromotionId().c_str());
-    EXPECT_EQ(promotion_.type, 0u);
-    EXPECT_EQ(promotion_.expires_at, 1740816427ull);
-    balance_ += 30;
-
-    // Check that promotion notification shows the appropriate amount
-    const std::string selector =
-        use_panel ? "[id='root']" : "[data-test-id='newTokenGrant']";
-    rewards_browsertest_util::WaitForElementToContain(
-        contents,
-        selector,
-        "Free Token Grant");
-    rewards_browsertest_util::WaitForElementToContain(
-        contents,
-        selector,
-        "30.000 BAT");
-
-    // Dismiss the promotion notification
-    if (use_panel) {
-      rewards_browsertest_util::WaitForElementThenClick(
-          contents, "#"
-                    "grant-completed-ok");
-    }
-  }
-
-  void ClaimPromotionViaCode() {
-    // Wait for promotion to initialize
-    WaitForPromotionInitialization();
-
-    const std::string solution = R"(
-    {
-      "captchaId": "a78e549f-904d-425e-9736-54f693117e01",
-      "x": 1,
-      "y": 1
-    })";
-    rewards_service_->AttestPromotion(
-        GetPromotionId(),
-        solution,
-        base::DoNothing());
-    WaitForPromotionFinished();
-    balance_ += 30;
   }
 
   void VisitPublisher(const std::string& publisher,
@@ -584,13 +419,14 @@ class RewardsBrowserTest
 
   void RefreshPublisherListUsingRewardsPopup() const {
     rewards_browsertest_util::WaitForElementThenClick(
-        OpenRewardsPopup(),
+        rewards_browsertest_helper::OpenRewardsPopup(browser()),
         "[data-test-id='unverified-check-button']");
   }
 
   content::WebContents* OpenSiteBanner(
       rewards_browsertest_util::ContributionType banner_type) const {
-    content::WebContents* popup_contents = OpenRewardsPopup();
+    content::WebContents* popup_contents =
+        rewards_browsertest_helper::OpenRewardsPopup(browser());
 
     // Construct an observer to wait for the site banner to load.
     content::WindowedNotificationObserver site_banner_observer(
@@ -796,28 +632,6 @@ class RewardsBrowserTest
     wallet_initialized_ = true;
     if (wait_for_wallet_initialization_loop_)
       wait_for_wallet_initialization_loop_->Quit();
-  }
-
-  void OnFetchPromotions(
-      brave_rewards::RewardsService* rewards_service,
-      unsigned int result,
-      const std::vector<brave_rewards::Promotion>& promotions) {
-    ASSERT_EQ(static_cast<ledger::Result>(result), ledger::Result::LEDGER_OK);
-    promotion_initialized_ = true;
-    if (wait_for_promotion_initialization_loop_)
-      wait_for_promotion_initialization_loop_->Quit();
-  }
-
-  void OnPromotionFinished(
-      brave_rewards::RewardsService* rewards_service,
-      const uint32_t result,
-      brave_rewards::Promotion promotion) {
-    ASSERT_EQ(static_cast<ledger::Result>(result), ledger::Result::LEDGER_OK);
-    promotion_finished_ = true;
-    promotion_ = promotion;
-    if (wait_for_promotion_finished_loop_) {
-      wait_for_promotion_finished_loop_->Quit();
-    }
   }
 
   void OnPublisherListNormalized(brave_rewards::RewardsService* rewards_service,
@@ -1028,21 +842,14 @@ class RewardsBrowserTest
   MOCK_METHOD1(OnGetShortRetries, void(bool));
 
   std::unique_ptr<RewardsBrowserTestResponse> response_;
+  std::unique_ptr<RewardsBrowserTestPromotion> promotion_;
 
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
 
   brave_rewards::RewardsServiceImpl* rewards_service_;
 
-  brave_rewards::Promotion promotion_;
-
   std::unique_ptr<base::RunLoop> wait_for_wallet_initialization_loop_;
   bool wallet_initialized_ = false;
-
-  std::unique_ptr<base::RunLoop> wait_for_promotion_initialization_loop_;
-  bool promotion_initialized_ = false;
-
-  std::unique_ptr<base::RunLoop> wait_for_promotion_finished_loop_;
-  bool promotion_finished_ = false;
 
   std::unique_ptr<base::RunLoop> wait_for_publisher_list_normalized_loop_;
   bool publisher_list_normalized_ = false;
@@ -1173,31 +980,31 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsSingleArg) {
 
   rewards_service()->SetEnvironment(ledger::Environment::PRODUCTION);
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Staging - true
   rewards_service()->SetEnvironment(ledger::Environment::PRODUCTION);
   rewards_service()->HandleFlags("staging=true");
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Staging - 1
   rewards_service()->SetEnvironment(ledger::Environment::PRODUCTION);
   rewards_service()->HandleFlags("staging=1");
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Staging - false
   rewards_service()->SetEnvironment(ledger::Environment::STAGING);
   rewards_service()->HandleFlags("staging=false");
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Staging - random
   rewards_service()->SetEnvironment(ledger::Environment::STAGING);
   rewards_service()->HandleFlags("staging=werwe");
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // SetDebug(true)
   EXPECT_CALL(*this, OnGetDebug(true));
@@ -1208,31 +1015,31 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsSingleArg) {
 
   rewards_service()->SetDebug(true);
   GetDebug();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Debug - true
   rewards_service()->SetDebug(false);
   rewards_service()->HandleFlags("debug=true");
   GetDebug();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Debug - 1
   rewards_service()->SetDebug(false);
   rewards_service()->HandleFlags("debug=1");
   GetDebug();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Debug - false
   rewards_service()->SetDebug(true);
   rewards_service()->HandleFlags("debug=false");
   GetDebug();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Debug - random
   rewards_service()->SetDebug(true);
   rewards_service()->HandleFlags("debug=werwe");
   GetDebug();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // SetEnvironment(ledger::Environment::PRODUCTION)
   EXPECT_CALL(*this, OnGetEnvironment(ledger::Environment::PRODUCTION));
@@ -1247,31 +1054,31 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsSingleArg) {
 
   rewards_service()->SetEnvironment(ledger::Environment::PRODUCTION);
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Development - true
   rewards_service()->SetEnvironment(ledger::Environment::PRODUCTION);
   rewards_service()->HandleFlags("development=true");
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Development - 1
   rewards_service()->SetEnvironment(ledger::Environment::PRODUCTION);
   rewards_service()->HandleFlags("development=1");
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Development - false
   rewards_service()->SetEnvironment(ledger::Environment::PRODUCTION);
   rewards_service()->HandleFlags("development=false");
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Development - random
   rewards_service()->SetEnvironment(ledger::Environment::PRODUCTION);
   rewards_service()->HandleFlags("development=werwe");
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // positive number
   EXPECT_CALL(*this, OnGetReconcileInterval(10));
@@ -1282,19 +1089,19 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsSingleArg) {
   rewards_service()->SetReconcileInterval(0);
   rewards_service()->HandleFlags("reconcile-interval=10");
   GetReconcileInterval();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Reconcile interval - negative number
   rewards_service()->SetReconcileInterval(0);
   rewards_service()->HandleFlags("reconcile-interval=-1");
   GetReconcileInterval();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Reconcile interval - string
   rewards_service()->SetReconcileInterval(0);
   rewards_service()->HandleFlags("reconcile-interval=sdf");
   GetReconcileInterval();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   EXPECT_CALL(*this, OnGetShortRetries(true));   // on
   EXPECT_CALL(*this, OnGetShortRetries(false));  // off
@@ -1303,13 +1110,13 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsSingleArg) {
   rewards_service()->SetShortRetries(false);
   rewards_service()->HandleFlags("short-retries=true");
   GetShortRetries();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 
   // Short retries - off
   rewards_service()->SetShortRetries(true);
   rewards_service()->HandleFlags("short-retries=false");
   GetShortRetries();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsMultipleFlags) {
@@ -1330,7 +1137,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsMultipleFlags) {
   GetShortRetries();
   GetEnvironment();
   GetDebug();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsWrongInput) {
@@ -1351,7 +1158,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsWrongInput) {
   GetShortRetries();
   GetDebug();
   GetEnvironment();
-  RunUntilIdle();
+  rewards_browsertest_util::RunUntilIdle();
 }
 
 // #1 - Claim promotion via settings page
@@ -1361,7 +1168,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ClaimPromotionViaSettingsPage) {
 
   // Claim and verify promotion using settings page
   const bool use_panel = false;
-  ClaimPromotion(use_panel);
+  balance_ = promotion_->ClaimPromotion(use_panel);
 }
 
 // #2 - Claim promotion via panel
@@ -1371,7 +1178,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ClaimPromotionViaPanel) {
 
   // Claim and verify promotion using panel
   const bool use_panel = true;
-  ClaimPromotion(use_panel);
+  balance_ = promotion_->ClaimPromotion(use_panel);
 }
 
 // #3 - Panel shows correct publisher data
@@ -1388,7 +1195,8 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   // Open the Rewards popup
-  content::WebContents* popup_contents = OpenRewardsPopup();
+  content::WebContents* popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
   ASSERT_TRUE(popup_contents);
 
   // Retrieve the inner text of the wallet panel and verify that it
@@ -1439,7 +1247,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, AutoContribution) {
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Visit verified publisher
   const bool verified = true;
@@ -1467,7 +1275,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Visit verified publisher
   const bool verified = true;
@@ -1540,7 +1348,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, AutoContributeWhenACOff) {
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Visit verified publisher
   const bool verified = true;
@@ -1566,7 +1374,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipVerifiedPublisher) {
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Tip verified publisher
   TipPublisher(
@@ -1580,7 +1388,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipUnverifiedPublisher) {
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Tip unverified publisher
   TipPublisher(
@@ -1594,7 +1402,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Tip verified publisher
   TipPublisher(
@@ -1609,7 +1417,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Tip verified publisher
   TipPublisher(
@@ -1790,7 +1598,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Tip unverified publisher
   TipPublisher(
@@ -1862,7 +1670,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        InsufficientNotificationForInsufficientAmount) {
   AddNotificationServiceObserver();
   EnableRewards();
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   TipViaCode(
       "duckduckgo.com",
@@ -1898,7 +1706,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        InsufficientNotificationForVerifiedInsufficientAmount) {
   AddNotificationServiceObserver();
   EnableRewards();
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   TipViaCode(
       "duckduckgo.com",
@@ -1933,13 +1741,8 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 // Test whether rewards is disabled in private profile.
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PrefsTestInPrivateWindow) {
   EnableRewards();
-  auto* profile = browser()->profile();
-  EXPECT_TRUE(profile->GetPrefs()->GetBoolean(
-      brave_rewards::prefs::kBraveRewardsEnabled));
-
-  Profile* private_profile = profile->GetOffTheRecordProfile();
-  EXPECT_FALSE(private_profile->GetPrefs()->GetBoolean(
-      brave_rewards::prefs::kBraveRewardsEnabled));
+  EXPECT_TRUE(rewards_browsertest_util::IsRewardsEnabled(browser()));
+  EXPECT_FALSE(rewards_browsertest_util::IsRewardsEnabled(browser(), true));
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
@@ -1960,7 +1763,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
   TipViaCode("3zsistemi.si", 10.0, ledger::PublisherStatus::NOT_VERIFIED);
   TipViaCode("3zsistemi.si", 10.0, ledger::PublisherStatus::NOT_VERIFIED);
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   response_->SetAlternativePublisherList(false);
   VerifyTip(41.0, false, false, true);
@@ -1996,7 +1799,8 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
   IsPendingBalanceCorrect();
 
   // Open the Rewards popup
-  content::WebContents* popup_contents = OpenRewardsPopup();
+  content::WebContents* popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
   ASSERT_TRUE(popup_contents);
 
   // Check if verified notification is shown
@@ -2020,7 +1824,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDefaultMonthlyTipChoices) {
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   GURL url = https_server()->GetURL("3zsistemi.si", "/index.html");
   ui_test_utils::NavigateToURLWithDisposition(
@@ -2035,7 +1839,8 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDefaultMonthlyTipChoices) {
       false,
       true);
 
-  content::WebContents* popup = OpenRewardsPopup();
+  content::WebContents* popup =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
   const auto tip_options = rewards_browsertest_util::GetRewardsPopupTipOptions(
       popup);
   ASSERT_EQ(tip_options, std::vector<double>({ 0, 1, 10, 100 }));
@@ -2175,7 +1980,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipConnectedPublisherAnon) {
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Tip verified publisher
   const double amount = 5.0;
@@ -2196,7 +2001,7 @@ IN_PROC_BROWSER_TEST_F(
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Tip verified publisher
   const double amount = 5.0;
@@ -2273,7 +2078,7 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipNonIntegralAmount) {
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // TODO(jhoneycutt): Test that this works through the tipping UI.
   rewards_service()->OnTip("duckduckgo.com", 2.5, false);
@@ -2287,7 +2092,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipNonIntegralAmount) {
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, RecurringTipNonIntegralAmount) {
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   const bool verified = true;
   VisitPublisher("duckduckgo.com", verified);
@@ -2305,7 +2110,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
   // Enable Rewards
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Visit verified publisher
   const bool verified = true;
@@ -2375,7 +2180,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
       false,
       true);
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   // Visit verified publisher
   const bool verified = true;
@@ -2412,7 +2217,8 @@ IN_PROC_BROWSER_TEST_F(
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDontDoRequests) {
   // Open the Rewards popup
-  content::WebContents *popup_contents = OpenRewardsPopup();
+  content::WebContents *popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
   ASSERT_TRUE(popup_contents);
 
   // Make sure that no request was made
@@ -2429,7 +2235,8 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowMonthlyIfACOff) {
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   // Open the Rewards popup
-  content::WebContents *popup_contents = OpenRewardsPopup();
+  content::WebContents *popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
   ASSERT_TRUE(popup_contents);
 
   rewards_browsertest_util::WaitForElementToAppear(
@@ -2448,7 +2255,8 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowACPercentInThePanel) {
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   // Open the Rewards popup
-  content::WebContents *popup_contents = OpenRewardsPopup();
+  content::WebContents *popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
   ASSERT_TRUE(popup_contents);
 
   const std::string score =
@@ -2465,7 +2273,7 @@ IN_PROC_BROWSER_TEST_F(
 
   EnableRewards();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   VisitPublisher("3zsistemi.si", true);
 
@@ -2529,9 +2337,9 @@ IN_PROC_BROWSER_TEST_F(
   response_->SetPromotionEmptyKey(true);
   EnableRewards();
 
-  WaitForPromotionInitialization();
+  promotion_->WaitForPromotionInitialization();
   rewards_browsertest_util::WaitForElementToAppear(
-      OpenRewardsPopup(),
+      rewards_browsertest_helper::OpenRewardsPopup(browser()),
       "[data-test-id=notification-close]",
       false);
 }
@@ -2548,7 +2356,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, CheckIfReconcileWasReset) {
       }));
   run_loop_first.Run();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   VisitPublisher("duckduckgo.com", true);
 
@@ -2580,7 +2388,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, CheckIfReconcileWasResetACOff) {
       }));
   run_loop_first.Run();
 
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
   TipPublisher(
       "duckduckgo.com",
       rewards_browsertest_util::ContributionType::MonthlyTip,
@@ -2600,7 +2408,7 @@ IN_PROC_BROWSER_TEST_F(
     SplitProcessOneTimeTip) {
   SetUpUpholdWallet(50.0);
   EnableRewards();
-  ClaimPromotionViaCode();
+  balance_ = promotion_->ClaimPromotionViaCode();
 
   TipPublisher(
       "kjozwiakstaging.github.io",

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "build/build_config.h"
+#include "chrome/browser/ui/browser.h"
 
 namespace content {
 class WebContents;
@@ -17,7 +18,7 @@ class WebContents;
 
 namespace rewards_browsertest_helper {
 
-
+content::WebContents* OpenRewardsPopup(Browser* browser);
 
 }  // namespace rewards_browsertest_helper
 
