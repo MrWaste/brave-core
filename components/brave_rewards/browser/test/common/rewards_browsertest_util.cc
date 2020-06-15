@@ -6,15 +6,15 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 
-#include "chrome/test/base/ui_test_utils.h"
-#include "brave/common/brave_paths.h"
-#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h" // NOLINT
 #include "base/run_loop.h"
-#include "chrome/browser/profiles/profile.h"
-#include "components/prefs/pref_service.h"
-#include "brave/components/brave_rewards/common/pref_names.h"
-#include "bat/ledger/mojom_structs.h"
 #include "base/test/bind_test_util.h"
+#include "bat/ledger/mojom_structs.h"
+#include "brave/common/brave_paths.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
+#include "brave/components/brave_rewards/common/pref_names.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
 
 namespace rewards_browsertest_util {
 

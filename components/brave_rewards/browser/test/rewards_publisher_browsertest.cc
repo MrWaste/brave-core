@@ -14,24 +14,26 @@
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_network_util.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_observer.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_response.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
 
-// npm run test -- brave_browser_tests --filter=RewardsBrowserTest.*
+// npm run test -- brave_browser_tests --filter=RewardsPublisherBrowserTest.*
 
 namespace rewards_browsertest {
 
-class RewardsBrowserTest
+class RewardsPublisherBrowserTest
     : public InProcessBrowserTest {
  public:
-  RewardsBrowserTest() {
+  RewardsPublisherBrowserTest() {
     response_ = std::make_unique<RewardsBrowserTestResponse>();
     observer_ = std::make_unique<RewardsBrowserTestObserver>();
   }
 
-  ~RewardsBrowserTest() override = default;
+  ~RewardsPublisherBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
@@ -56,7 +58,7 @@ class RewardsBrowserTest
     response_->LoadMocks();
     rewards_service_->ForTestingSetTestResponseCallback(
         base::BindRepeating(
-            &RewardsBrowserTest::GetTestResponse,
+            &RewardsPublisherBrowserTest::GetTestResponse,
             base::Unretained(this)));
 
     // Observer
@@ -84,86 +86,66 @@ class RewardsBrowserTest
         response);
   }
 
-  content::WebContents* contents() const {
-    return browser()->tab_strip_model()->GetActiveWebContents();
-  }
-
   std::unique_ptr<RewardsBrowserTestResponse> response_;
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
   brave_rewards::RewardsServiceImpl* rewards_service_;
   std::unique_ptr<RewardsBrowserTestObserver> observer_;
 };
 
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, RenderWelcome) {
-  rewards_browsertest_helper::EnableRewards(browser());
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    PanelShowsCorrectPublisherData) {
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service_);
 
-  EXPECT_STREQ(
-      contents()->GetLastCommittedURL().spec().c_str(),
-      "chrome://rewards/");
+  // Navigate to a verified site in a new tab
+  const std::string publisher = "duckduckgo.com";
+  GURL url = https_server_->GetURL(publisher, "/index.html");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(),
+      url,
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Open the Rewards popup
+  content::WebContents* popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
+  ASSERT_TRUE(popup_contents);
+
+  // Retrieve the inner text of the wallet panel and verify that it
+  // looks as expected
+  rewards_browsertest_util::WaitForElementToContain(
+      popup_contents,
+      "[id='wallet-panel']",
+      "Brave Verified Creator");
+  rewards_browsertest_util::WaitForElementToContain(
+      popup_contents,
+      "[id='wallet-panel']",
+      publisher);
+
+  // Retrieve the inner HTML of the wallet panel and verify that it
+  // contains the expected favicon
+  {
+    const std::string favicon =
+        "chrome://favicon/size/64@1x/https://" + publisher;
+    rewards_browsertest_util::WaitForElementToContainHTML(
+        popup_contents,
+        "#wallet-panel",
+        favicon);
+  }
 }
 
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ToggleRewards) {
+IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitVerifiedPublisher) {
+  // Enable Rewards
   rewards_browsertest_helper::EnableRewards(browser());
 
-  // Toggle rewards off
-  rewards_browsertest_util::WaitForElementThenClick(
-      contents(),
-      "[data-test-id2='enableMain']");
-  std::string value = rewards_browsertest_util::WaitForElementThenGetAttribute(
-      contents(),
-      "[data-test-id2='enableMain']",
-      "data-toggled");
-  ASSERT_STREQ(value.c_str(), "false");
-
-  // Toggle rewards back on
-  rewards_browsertest_util::WaitForElementThenClick(
-      contents(),
-      "[data-test-id2='enableMain']");
-  value = rewards_browsertest_util::WaitForElementThenGetAttribute(
-      contents(),
-      "[data-test-id2='enableMain']",
-      "data-toggled");
-  ASSERT_STREQ(value.c_str(), "true");
+  VisitPublisher("duckduckgo.com", true);
 }
 
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ActivateSettingsModal) {
+IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitUnverifiedPublisher) {
+  // Enable Rewards
   rewards_browsertest_helper::EnableRewards(browser());
 
-  rewards_browsertest_util::WaitForElementThenClick(
-      contents(),
-      "[data-test-id='settingsButton']");
-  rewards_browsertest_util::WaitForElementToAppear(
-      contents(),
-      "#modal");
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ToggleAutoContribute) {
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  // once rewards has loaded, reload page to activate auto-contribute
-  contents()->GetController().Reload(content::ReloadType::NORMAL, true);
-  EXPECT_TRUE(WaitForLoadStop(contents()));
-
-  // toggle auto contribute off
-  rewards_browsertest_util::WaitForElementThenClick(
-      contents(),
-      "[data-test-id2='autoContribution']");
-  std::string value =
-      rewards_browsertest_util::WaitForElementThenGetAttribute(
-        contents(),
-        "[data-test-id2='autoContribution']",
-        "data-toggled");
-  ASSERT_STREQ(value.c_str(), "false");
-
-  // toggle auto contribute back on
-  rewards_browsertest_util::WaitForElementThenClick(
-      contents(),
-      "[data-test-id2='autoContribution']");
-  value = rewards_browsertest_util::WaitForElementThenGetAttribute(
-      contents(),
-      "[data-test-id2='autoContribution']",
-      "data-toggled");
-  ASSERT_STREQ(value.c_str(), "true");
+  VisitPublisher("brave.com", false);
 }
 
 }  // namespace rewards_browsertest

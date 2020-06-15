@@ -30,13 +30,11 @@ class RewardsBrowserTestPromotion
 
   void WaitForPromotionInitialization();
 
+  void WaitForPromotionFinished();
+
   brave_rewards::Promotion GetPromotion();
 
   std::string GetPromotionId();
-
-  // Use this function only if you are testing claim flow
-  // otherwise always use ClaimPromotionViaCode to seep things up
-  double ClaimPromotion(bool use_panel);
 
   double ClaimPromotionViaCode();
 
@@ -50,8 +48,6 @@ class RewardsBrowserTestPromotion
       brave_rewards::RewardsService* rewards_service,
       const uint32_t result,
       brave_rewards::Promotion promotion) override;
-
-  void WaitForPromotionFinished();
 
   std::unique_ptr<base::RunLoop> wait_for_initialization_loop_;
   bool initialized_ = false;

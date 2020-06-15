@@ -10,6 +10,7 @@
 #include <string>
 
 #include "bat/ledger/mojom_structs.h"
+#include "bat/ledger/internal/request/request_util.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 

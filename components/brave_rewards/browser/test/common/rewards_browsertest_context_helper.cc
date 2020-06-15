@@ -3,20 +3,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_helper.h"
-#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_util.h"
-#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
-#include "content/public/test/browser_test_utils.h"
-#include "brave/common/extensions/extension_constants.h"
+#include "base/test/bind_test_util.h"
 #include "brave/browser/extensions/api/brave_action_api.h"
 #include "brave/browser/ui/views/brave_actions/brave_actions_container.h"
 #include "brave/browser/ui/views/location_bar/brave_location_bar_view.h"
-#include "testing/gtest/include/gtest/gtest.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#include "content/public/browser/notification_types.h"
-#include "chrome/test/base/ui_test_utils.h"
-#include "base/test/bind_test_util.h"
+#include "brave/common/extensions/extension_constants.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_helper.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_util.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "brave/components/brave_rewards/common/pref_names.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/notification_types.h"
+#include "content/public/test/browser_test_utils.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace rewards_browsertest_helper {
 

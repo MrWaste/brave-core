@@ -3,9 +3,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_promotion.h"
-#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_util.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_helper.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_util.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_promotion.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace rewards_browsertest {
@@ -72,70 +72,6 @@ brave_rewards::Promotion RewardsBrowserTestPromotion::GetPromotion() {
 
 std::string RewardsBrowserTestPromotion::GetPromotionId() {
   return "6820f6a4-c6ef-481d-879c-d2c30c8928c3";
-}
-
-double RewardsBrowserTestPromotion::ClaimPromotion(bool use_panel) {
-  // Wait for promotion to initialize
-  WaitForPromotionInitialization();
-
-  // Use the appropriate WebContents
-  content::WebContents *contents = use_panel
-      ? rewards_browsertest_helper::OpenRewardsPopup(browser_)
-      : browser_->tab_strip_model()->GetActiveWebContents();
-
-  // Claim promotion via settings page or panel, as instructed
-  if (use_panel) {
-    rewards_browsertest_util::WaitForElementThenClick(
-        contents,
-        "button");
-  } else {
-    rewards_browsertest_util::WaitForElementThenClick(
-        contents,
-        "[data-test-id='claimGrant']");
-  }
-
-  // Wait for CAPTCHA
-  rewards_browsertest_util::WaitForElementToAppear(
-      contents,
-      "[data-test-id='captcha']");
-
-  rewards_browsertest_util::DragAndDrop(
-      contents,
-      "[data-test-id=\"captcha-triangle\"]",
-      "[data-test-id=\"captcha-drop\"]");
-
-  WaitForPromotionFinished();
-
-  // Ensure that promotion looks as expected
-  auto promotion = GetPromotion();
-  EXPECT_STREQ(std::to_string(promotion.amount).c_str(), "30.000000");
-  EXPECT_STREQ(
-      promotion.promotion_id.c_str(),
-      GetPromotionId().c_str());
-  EXPECT_EQ(promotion.type, 0u);
-  EXPECT_EQ(promotion.expires_at, 1740816427ull);
-
-  // Check that promotion notification shows the appropriate amount
-  const std::string selector =
-      use_panel ? "[id='root']" : "[data-test-id='newTokenGrant']";
-  rewards_browsertest_util::WaitForElementToContain(
-      contents,
-      selector,
-      "Free Token Grant");
-  rewards_browsertest_util::WaitForElementToContain(
-      contents,
-      selector,
-      "30.000 BAT");
-
-  // Dismiss the promotion notification
-  if (use_panel) {
-    rewards_browsertest_util::WaitForElementThenClick(
-        contents,
-        "#"
-        "grant-completed-ok");
-  }
-
-  return 30;
 }
 
 double RewardsBrowserTestPromotion::ClaimPromotionViaCode() {

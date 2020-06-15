@@ -6,9 +6,7 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
-#include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind_test_util.h"
@@ -17,7 +15,7 @@
 #include "brave/common/brave_paths.h"
 #include "brave/components/brave_rewards/browser/balance_report.h"
 #include "brave/components/brave_rewards/browser/rewards_service_impl.h"
-#include "brave/components/brave_rewards/browser/rewards_service_observer.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_observer.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -25,16 +23,16 @@
 
 // npm run test -- brave_browser_tests --filter=RewardsStateBrowserTest.*
 
+namespace rewards_browsertest {
+
 class RewardsStateBrowserTest
-    : public InProcessBrowserTest,
-      public brave_rewards::RewardsServiceObserver,
-      public base::SupportsWeakPtr<RewardsBrowserTest> {
+    : public InProcessBrowserTest {
  public:
   RewardsStateBrowserTest() {
+    observer_ = std::make_unique<RewardsBrowserTestObserver>();
   }
 
-  ~RewardsStateBrowserTest() override {
-  }
+  ~RewardsStateBrowserTest() override = default;
 
   bool SetUpUserDataDirectory() override {
     int32_t current_version = 0;
@@ -47,16 +45,16 @@ class RewardsStateBrowserTest
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
 
+    // Rewards service
     brave::RegisterPathProvider();
-
     profile_ = browser()->profile();
-
     rewards_service_ = static_cast<brave_rewards::RewardsServiceImpl*>(
         brave_rewards::RewardsServiceFactory::GetForProfile(profile_));
 
-    rewards_service_->AddObserver(this);
+    // Observer
+    observer_->Initialize(rewards_service_);
     if (!rewards_service_->IsWalletInitialized()) {
-      WaitForWalletInitialization();
+      observer_->WaitForWalletInitialization();
     }
     rewards_service_->SetLedgerEnvForTesting();
   }
@@ -87,26 +85,6 @@ class RewardsStateBrowserTest
     ASSERT_GT(test_version, 0);
 
     *version = test_version - 1;
-  }
-
-  void WaitForWalletInitialization() {
-    if (wallet_initialized_) {
-      return;
-    }
-    wait_for_wallet_initialization_loop_.reset(new base::RunLoop);
-    wait_for_wallet_initialization_loop_->Run();
-  }
-
-  void OnWalletInitialized(
-      brave_rewards::RewardsService* rewards_service,
-      int32_t result) override {
-    const auto converted_result = static_cast<ledger::Result>(result);
-    ASSERT_TRUE(converted_result == ledger::Result::WALLET_CREATED ||
-                converted_result == ledger::Result::LEDGER_OK);
-    wallet_initialized_ = true;
-    if (wait_for_wallet_initialization_loop_) {
-      wait_for_wallet_initialization_loop_->Quit();
-    }
   }
 
   base::FilePath GetUserDataPath() const {
@@ -163,9 +141,8 @@ class RewardsStateBrowserTest
   }
 
   brave_rewards::RewardsServiceImpl* rewards_service_;
+  std::unique_ptr<RewardsBrowserTestObserver> observer_;
 
-  std::unique_ptr<base::RunLoop> wait_for_wallet_initialization_loop_;
-  bool wallet_initialized_ = false;
   Profile* profile_;
 };
 
@@ -247,3 +224,5 @@ IN_PROC_BROWSER_TEST_F(RewardsStateBrowserTest, State_2) {
       profile_->GetPrefs()->GetBoolean("brave.rewards.inline_tip.github"),
       false);
 }
+
+}  // namespace rewards_browsertest

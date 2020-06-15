@@ -6,14 +6,14 @@
 #include <utility>
 #include <vector>
 
-#include "base/strings/string_split.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "bat/ledger/internal/static_values.h"
+#include "base/strings/string_split.h"
 #include "bat/ledger/internal/request/request_util.h"
+#include "bat/ledger/internal/static_values.h"
 #include "bat/ledger/internal/uphold/uphold_util.h"
-#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_response.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_network_util.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_response.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "chrome/test/base/ui_test_utils.h"
 
@@ -86,7 +86,6 @@ void RewardsBrowserTestResponse::Get(
     int32_t method,
     int* response_status_code,
     std::string* response) {
-  LOG(ERROR) << "NEJC " << external_balance_;
   DCHECK(response_status_code && response);
 
   request_made_ = true;
