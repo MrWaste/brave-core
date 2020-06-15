@@ -134,18 +134,19 @@ IN_PROC_BROWSER_TEST_F(
   }
 }
 
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitVerifiedPublisher) {
-  // Enable Rewards
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  VisitPublisher("duckduckgo.com", true);
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitUnverifiedPublisher) {
-  // Enable Rewards
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  VisitPublisher("brave.com", false);
-}
+// TODO
+//IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitVerifiedPublisher) {
+//  // Enable Rewards
+//  rewards_browsertest_helper::EnableRewards(browser());
+//
+//  VisitPublisher("duckduckgo.com", true);
+//}
+//
+//IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitUnverifiedPublisher) {
+//  // Enable Rewards
+//  rewards_browsertest_helper::EnableRewards(browser());
+//
+//  VisitPublisher("brave.com", false);
+//}
 
 }  // namespace rewards_browsertest

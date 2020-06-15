@@ -20,12 +20,10 @@ void RewardsBrowserTestObserver::Initialize(
 }
 
 void RewardsBrowserTestObserver::WaitForWalletInitialization() {
-  LOG(ERROR) << "NEJC WaitForWalletInitialization 1";
   if (wallet_initialized_) {
     return;
   }
 
-  LOG(ERROR) << "NEJC WaitForWalletInitialization 2";
   wait_for_wallet_initialization_loop_.reset(new base::RunLoop);
   wait_for_wallet_initialization_loop_->Run();
 }
@@ -33,7 +31,6 @@ void RewardsBrowserTestObserver::WaitForWalletInitialization() {
 void RewardsBrowserTestObserver::OnWalletInitialized(
     brave_rewards::RewardsService* rewards_service,
     int32_t result) {
-  LOG(ERROR) << "NEJC OnWalletInitialized 1";
   const auto converted_result = static_cast<ledger::Result>(result);
   ASSERT_TRUE(converted_result == ledger::Result::WALLET_CREATED ||
               converted_result == ledger::Result::LEDGER_OK);

@@ -138,8 +138,9 @@ class RewardsBrowserTest
   }
 
   void WaitForPublisherListNormalized() {
-    if (publisher_list_normalized_)
+    if (publisher_list_normalized_) {
       return;
+    }
     wait_for_publisher_list_normalized_loop_.reset(new base::RunLoop);
     wait_for_publisher_list_normalized_loop_->Run();
   }
@@ -170,7 +171,8 @@ class RewardsBrowserTest
 
   void WaitForMultipleTipReconcileCompleted(int32_t needed) {
     multiple_tip_reconcile_needed_ = needed;
-    if (multiple_tip_reconcile_completed_) {
+    if (multiple_tip_reconcile_completed_||
+        multiple_tip_reconcile_count_ == needed) {
       return;
     }
 
@@ -180,20 +182,13 @@ class RewardsBrowserTest
 
   void WaitForMultipleACReconcileCompleted(int32_t needed) {
     multiple_ac_reconcile_needed_ = needed;
-    if (multiple_ac_reconcile_completed_) {
+    if (multiple_ac_reconcile_completed_ ||
+        multiple_ac_reconcile_count_ == needed) {
       return;
     }
 
     wait_for_multiple_ac_completed_loop_.reset(new base::RunLoop);
     wait_for_multiple_ac_completed_loop_->Run();
-  }
-
-  void WaitForInsufficientFundsNotification() {
-    if (insufficient_notification_would_have_already_shown_) {
-      return;
-    }
-    wait_for_insufficient_notification_loop_.reset(new base::RunLoop);
-    wait_for_insufficient_notification_loop_->Run();
   }
 
   void WaitForRecurringTipToBeSaved() {
@@ -204,30 +199,20 @@ class RewardsBrowserTest
     wait_for_recurring_tip_saved_loop_->Run();
   }
 
-  void AddNotificationServiceObserver() {
-    rewards_service_->GetNotificationService()->AddObserver(this);
-  }
+  void UpdateContributionBalance(
+      double amount,
+      bool verified = false,
+      const ledger::ContributionProcessor processor =
+          ledger::ContributionProcessor::BRAVE_TOKENS) {
 
-  bool IsShowingNotificationForType(
-      const RewardsNotificationType type) const {
-    const auto& notifications = rewards_service_->GetAllNotifications();
-    for (const auto& notification : notifications) {
-      if (notification.second.type_ == type) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  void UpdateContributionBalance(double amount, bool verified = false) {
     if (verified) {
-      if (balance_ > 0) {
+      if (processor == ledger::ContributionProcessor::BRAVE_TOKENS ||
+          processor == ledger::ContributionProcessor::BRAVE_USER_FUNDS) {
         balance_ -= amount;
         return;
       }
 
-      if (verified_wallet_) {
+      if (processor == ledger::ContributionProcessor::UPHOLD) {
         external_balance_ -= amount;
         return;
       }
@@ -391,7 +376,8 @@ class RewardsBrowserTest
       const std::string& publisher,
       rewards_browsertest_util::ContributionType type,
       bool should_contribute = false,
-      int32_t selection = 0) {
+      int32_t selection = 0,
+      int32_t number_of_contributions = 1) {
     // we shouldn't be adding publisher to AC list,
     // so that we can focus only on tipping part
     rewards_service_->SetPublisherMinVisitTime(8);
@@ -461,8 +447,8 @@ class RewardsBrowserTest
     } else if (type == rewards_browsertest_util::ContributionType::OneTimeTip &&
         should_contribute) {
       // Wait for reconciliation to complete
-      WaitForTipReconcileCompleted();
-      ASSERT_EQ(tip_reconcile_status_, ledger::Result::LEDGER_OK);
+      WaitForMultipleTipReconcileCompleted(number_of_contributions);
+      ASSERT_EQ(multiple_tip_reconcile_status_, ledger::Result::LEDGER_OK);
     }
 
     // Make sure that thank you banner shows correct publisher data
@@ -563,13 +549,17 @@ class RewardsBrowserTest
       unsigned int result,
       const std::string& contribution_id,
       const double amount,
-      const int32_t type) {
+      const int32_t type,
+      const int32_t processor) {
     const auto converted_result = static_cast<ledger::Result>(result);
     const auto converted_type =
         static_cast<ledger::RewardsType>(type);
 
     if (converted_result == ledger::Result::LEDGER_OK) {
-      UpdateContributionBalance(amount, true);
+      UpdateContributionBalance(
+          amount,
+          true,
+          static_cast<ledger::ContributionProcessor>(processor));
     }
 
     if (converted_type == ledger::RewardsType::AUTO_CONTRIBUTE) {
@@ -641,53 +631,6 @@ class RewardsBrowserTest
     if (wait_for_pending_tip_saved_loop_) {
       wait_for_pending_tip_saved_loop_->Quit();
     }
-  }
-
-  void OnNotificationAdded(
-      brave_rewards::RewardsNotificationService* rewards_notification_service,
-      const brave_rewards::RewardsNotificationService::RewardsNotification&
-      notification) {
-    const auto& notifications =
-        rewards_notification_service->GetAllNotifications();
-
-    for (const auto& notification : notifications) {
-      switch (notification.second.type_) {
-        case brave_rewards::RewardsNotificationService::
-            RewardsNotificationType::REWARDS_NOTIFICATION_INSUFFICIENT_FUNDS: {
-          insufficient_notification_would_have_already_shown_ = true;
-          if (wait_for_insufficient_notification_loop_) {
-            wait_for_insufficient_notification_loop_->Quit();
-          }
-
-          break;
-        }
-        default: {
-          break;
-        }
-      }
-    }
-  }
-
-  /**
-   * When using notification observer for insufficient funds, tests will fail
-   * for sufficient funds because observer will never be called for
-   * notification. Use this as callback to know when we come back with
-   * sufficient funds to prevent inf loop
-   * */
-  void ShowNotificationAddFundsForTesting(bool sufficient) {
-    if (sufficient) {
-      insufficient_notification_would_have_already_shown_ = true;
-      if (wait_for_insufficient_notification_loop_) {
-        wait_for_insufficient_notification_loop_->Quit();
-      }
-    }
-  }
-
-  void CheckInsufficientFundsForTesting() {
-    rewards_service_->MaybeShowNotificationAddFundsForTesting(
-        base::BindOnce(
-            &RewardsBrowserTest::ShowNotificationAddFundsForTesting,
-            AsWeakPtr()));
   }
 
   void TipViaCode(
@@ -777,9 +720,6 @@ class RewardsBrowserTest
   int32_t multiple_tip_reconcile_count_ = 0;
   int32_t multiple_tip_reconcile_needed_ = 0;
   ledger::Result multiple_tip_reconcile_status_ = ledger::Result::LEDGER_ERROR;
-
-  std::unique_ptr<base::RunLoop> wait_for_insufficient_notification_loop_;
-  bool insufficient_notification_would_have_already_shown_ = false;
 
   std::unique_ptr<base::RunLoop> wait_for_recurring_tip_saved_loop_;
   bool recurring_tip_saved_ = false;
@@ -1173,126 +1113,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
       publisher);
 }
 
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
-    InsufficientNotificationForZeroAmountZeroPublishers) {
-  AddNotificationServiceObserver();
-  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
-  CheckInsufficientFundsForTesting();
-  WaitForInsufficientFundsNotification();
-  const brave_rewards::RewardsNotificationService::RewardsNotificationsMap&
-      notifications = rewards_service_->GetAllNotifications();
 
-  if (notifications.empty()) {
-    SUCCEED();
-    return;
-  }
-
-  bool is_showing_notification = IsShowingNotificationForType(
-      RewardsNotificationType::REWARDS_NOTIFICATION_INSUFFICIENT_FUNDS);
-
-  EXPECT_FALSE(is_showing_notification);
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
-                       InsufficientNotificationForACNotEnoughFunds) {
-  AddNotificationServiceObserver();
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  // Visit publishers
-  const bool verified = true;
-  while (!last_publisher_added_) {
-    VisitPublisher("duckduckgo.com", verified);
-    VisitPublisher("bumpsmack.com", verified);
-    VisitPublisher("brave.com", !verified, true);
-  }
-
-  CheckInsufficientFundsForTesting();
-  WaitForInsufficientFundsNotification();
-  const brave_rewards::RewardsNotificationService::RewardsNotificationsMap&
-      notifications = rewards_service_->GetAllNotifications();
-
-  if (notifications.empty()) {
-    SUCCEED();
-    return;
-  }
-
-  bool is_showing_notification = IsShowingNotificationForType(
-      RewardsNotificationType::REWARDS_NOTIFICATION_INSUFFICIENT_FUNDS);
-
-  EXPECT_FALSE(is_showing_notification);
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
-                       InsufficientNotificationForInsufficientAmount) {
-  AddNotificationServiceObserver();
-  rewards_browsertest_helper::EnableRewards(browser());
-  balance_ = promotion_->ClaimPromotionViaCode();
-
-  TipViaCode(
-      "duckduckgo.com",
-      20.0,
-      ledger::PublisherStatus::VERIFIED,
-      false,
-      true);
-
-  TipViaCode(
-      "brave.com",
-      50.0,
-      ledger::PublisherStatus::NOT_VERIFIED,
-      false,
-      true);
-
-  CheckInsufficientFundsForTesting();
-  WaitForInsufficientFundsNotification();
-  const brave_rewards::RewardsNotificationService::RewardsNotificationsMap&
-      notifications = rewards_service_->GetAllNotifications();
-
-  if (notifications.empty()) {
-    SUCCEED();
-    return;
-  }
-
-  bool is_showing_notification = IsShowingNotificationForType(
-      RewardsNotificationType::REWARDS_NOTIFICATION_INSUFFICIENT_FUNDS);
-
-  EXPECT_FALSE(is_showing_notification);
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
-                       InsufficientNotificationForVerifiedInsufficientAmount) {
-  AddNotificationServiceObserver();
-  rewards_browsertest_helper::EnableRewards(browser());
-  balance_ = promotion_->ClaimPromotionViaCode();
-
-  TipViaCode(
-      "duckduckgo.com",
-      50.0,
-      ledger::PublisherStatus::VERIFIED,
-      false,
-      true);
-
-  TipViaCode(
-      "brave.com",
-      50.0,
-      ledger::PublisherStatus::NOT_VERIFIED,
-      false,
-      true);
-
-  CheckInsufficientFundsForTesting();
-  WaitForInsufficientFundsNotification();
-  const brave_rewards::RewardsNotificationService::RewardsNotificationsMap&
-      notifications = rewards_service_->GetAllNotifications();
-
-  if (notifications.empty()) {
-    FAIL() << "Should see Insufficient Funds notification";
-    return;
-  }
-
-  bool is_showing_notification = IsShowingNotificationForType(
-      RewardsNotificationType::REWARDS_NOTIFICATION_INSUFFICIENT_FUNDS);
-
-  EXPECT_TRUE(is_showing_notification);
-}
 
 // Test whether rewards is disabled in private profile.
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PrefsTestInPrivateWindow) {
@@ -1302,8 +1123,6 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PrefsTestInPrivateWindow) {
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
-  AddNotificationServiceObserver();
-
   response_->SetAlternativePublisherList(true);
 
   rewards_browsertest_helper::EnableRewards(browser());
@@ -1970,7 +1789,8 @@ IN_PROC_BROWSER_TEST_F(
       "kjozwiakstaging.github.io",
       rewards_browsertest_util::ContributionType::OneTimeTip,
       true,
-      1);
+      1,
+      2);
 
   ActivateTabAtIndex(0);
 

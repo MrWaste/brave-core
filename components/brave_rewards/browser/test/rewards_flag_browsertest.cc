@@ -276,5 +276,4 @@ IN_PROC_BROWSER_TEST_F(RewardsFlagBrowserTest, HandleFlagsWrongInput) {
   rewards_browsertest_util::RunUntilIdle();
 }
 
-
 }  // namespace rewards_browsertest
