@@ -20,6 +20,8 @@ namespace rewards_browsertest_helper {
 
 content::WebContents* OpenRewardsPopup(Browser* browser);
 
+void EnableRewards(Browser* browser, const bool use_new_tab = false);
+
 }  // namespace rewards_browsertest_helper
 
 #endif  // BRAVE_COMPONENTS_BRAVE_REWARDS_BROWSER_TEST_COMMON_REWARDS_BROWSERTEST_CONTEXT_HELPER_H_

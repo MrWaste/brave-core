@@ -5,6 +5,7 @@
 
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_helper.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_util.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "content/public/test/browser_test_utils.h"
 #include "brave/common/extensions/extension_constants.h"
 #include "brave/browser/extensions/api/brave_action_api.h"
@@ -80,6 +81,25 @@ content::WebContents* OpenRewardsPopup(Browser* browser) {
       "[data-test-id='rewards-panel']");
 
   return popup_contents;
+}
+
+void EnableRewards(Browser* browser, const bool use_new_tab) {
+  // Load rewards page
+  GURL page_url =
+      use_new_tab
+      ? rewards_browsertest_util::GetNewTabUrl()
+      : rewards_browsertest_util::GetRewardsUrl();
+  ui_test_utils::NavigateToURL(browser, page_url);
+  auto* contents = browser->tab_strip_model()->GetActiveWebContents();
+  WaitForLoadStop(contents);
+
+  // Opt in and create wallet to enable rewards
+  rewards_browsertest_util::WaitForElementThenClick(
+      contents,
+      "[data-test-id='optInAction']");
+  rewards_browsertest_util::WaitForElementToAppear(
+      contents,
+      "[data-test-id2='enableMain']");
 }
 
 }  // namespace rewards_browsertest_helper

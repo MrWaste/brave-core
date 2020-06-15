@@ -13,6 +13,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "brave/components/brave_rewards/common/pref_names.h"
+#include "bat/ledger/mojom_structs.h"
+#include "base/test/bind_test_util.h"
 
 namespace rewards_browsertest_util {
 
@@ -39,6 +41,34 @@ double IsRewardsEnabled(Browser* browser, const bool private_window) {
 void RunUntilIdle() {
     base::RunLoop loop;
     loop.RunUntilIdle();
+}
+
+GURL GetRewardsUrl() {
+  GURL rewards_url("brave://rewards");
+  return rewards_url;
+}
+
+GURL GetNewTabUrl() {
+  GURL new_tab_url("brave://newtab");
+  return new_tab_url;
+}
+
+void EnableRewardsViaCode(
+    Browser* browser,
+    brave_rewards::RewardsServiceImpl* rewards_service) {
+  base::RunLoop run_loop;
+  bool wallet_created = false;
+  rewards_service->CreateWallet(
+      base::BindLambdaForTesting([&](int32_t result) {
+        wallet_created =
+            (result == static_cast<int32_t>(ledger::Result::WALLET_CREATED));
+        run_loop.Quit();
+      }));
+
+  run_loop.Run();
+
+  ASSERT_TRUE(wallet_created);
+  ASSERT_TRUE(IsRewardsEnabled(browser));
 }
 
 }  // namespace rewards_browsertest_util

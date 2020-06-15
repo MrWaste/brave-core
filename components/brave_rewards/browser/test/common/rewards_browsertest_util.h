@@ -11,6 +11,8 @@
 #include "base/files/file_path.h"
 #include "bat/ledger/internal/request/request_util.h"
 #include "chrome/browser/ui/browser.h"
+#include "url/gurl.h"
+#include "brave/components/brave_rewards/browser/rewards_service_impl.h"
 
 namespace rewards_browsertest_util {
 
@@ -21,6 +23,14 @@ void GetTestDataDir(base::FilePath* test_data_dir);
 double IsRewardsEnabled(Browser* browser, const bool private_window = false);
 
 void RunUntilIdle();
+
+GURL GetRewardsUrl();
+
+GURL GetNewTabUrl();
+
+void EnableRewardsViaCode(
+    Browser* browser,
+    brave_rewards::RewardsServiceImpl* rewards_service);
 
 }  // namespace rewards_browsertest_util
 

@@ -292,16 +292,6 @@ class RewardsBrowserTest
     return BalanceDoubleToString(balance_);
   }
 
-  GURL rewards_url() {
-    GURL rewards_url("brave://rewards");
-    return rewards_url;
-  }
-
-  GURL new_tab_url() {
-    GURL new_tab_url("brave://newtab");
-    return new_tab_url;
-  }
-
   GURL uphold_auth_url() {
     GURL url("chrome://rewards/uphold/authorization?"
              "code=0c42b34121f624593ee3b04cbe4cc6ddcd72d&state=123456789");
@@ -310,36 +300,6 @@ class RewardsBrowserTest
 
   content::WebContents* contents() const {
     return browser()->tab_strip_model()->GetActiveWebContents();
-  }
-
-  void EnableRewards(bool use_new_tab = false) {
-    // Load rewards page
-    GURL page_url = use_new_tab ? new_tab_url() : rewards_url();
-    ui_test_utils::NavigateToURL(browser(), page_url);
-    WaitForLoadStop(contents());
-    // Opt in and create wallet to enable rewards
-    rewards_browsertest_util::WaitForElementThenClick(
-        contents(),
-        "[data-test-id='optInAction']");
-    rewards_browsertest_util::WaitForElementToAppear(
-        contents(),
-        "[data-test-id2='enableMain']");
-  }
-
-  void EnableRewardsViaCode() {
-    base::RunLoop run_loop;
-    bool wallet_created = false;
-    rewards_service_->CreateWallet(
-        base::BindLambdaForTesting([&](int32_t result) {
-          wallet_created =
-              (result == static_cast<int32_t>(ledger::Result::WALLET_CREATED));
-          run_loop.Quit();
-        }));
-
-    run_loop.Run();
-
-    ASSERT_TRUE(wallet_created);
-    ASSERT_TRUE(rewards_browsertest_util::IsRewardsEnabled(browser()));
   }
 
   brave_rewards::RewardsServiceImpl* rewards_service() {
@@ -896,7 +856,7 @@ class RewardsBrowserTest
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, RenderWelcome) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
   EXPECT_STREQ(contents()->GetLastCommittedURL().spec().c_str(),
       // actual url is always chrome://
       "chrome://rewards/");
@@ -904,7 +864,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, RenderWelcome) {
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ToggleRewards) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   // Toggle rewards off
   rewards_browsertest_util::WaitForElementThenClick(
@@ -929,7 +889,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ToggleRewards) {
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ToggleAutoContribute) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   // once rewards has loaded, reload page to activate auto-contribute
   contents()->GetController().Reload(content::ReloadType::NORMAL, true);
@@ -958,7 +918,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ToggleAutoContribute) {
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ActivateSettingsModal) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   rewards_browsertest_util::WaitForElementThenClick(
       contents(),
@@ -1164,7 +1124,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, HandleFlagsWrongInput) {
 // #1 - Claim promotion via settings page
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ClaimPromotionViaSettingsPage) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   // Claim and verify promotion using settings page
   const bool use_panel = false;
@@ -1174,7 +1134,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ClaimPromotionViaSettingsPage) {
 // #2 - Claim promotion via panel
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ClaimPromotionViaPanel) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   // Claim and verify promotion using panel
   const bool use_panel = true;
@@ -1185,7 +1145,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ClaimPromotionViaPanel) {
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        PanelShowsCorrectPublisherData) {
   // Enable Rewards
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
 
   // Navigate to a verified site in a new tab
   const std::string publisher = "duckduckgo.com";
@@ -1225,7 +1185,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 // #4a - Visit verified publisher
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitVerifiedPublisher) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   // Visit verified publisher
   const bool verified = true;
@@ -1235,7 +1195,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitVerifiedPublisher) {
 // #4b - Visit unverified publisher
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitUnverifiedPublisher) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   // Visit unverified publisher
   const bool verified = false;
@@ -1245,7 +1205,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitUnverifiedPublisher) {
 // #5 - Auto contribution
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, AutoContribution) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1273,7 +1233,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, AutoContribution) {
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
     AutoContributionMultiplePublishers) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1303,7 +1263,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
     AutoContributionMultiplePublishersUphold) {
   SetUpUpholdWallet(50.0);
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   ledger::SKUOrderItemList items;
   auto item = ledger::SKUOrderItem::New();
@@ -1346,7 +1306,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, AutoContributeWhenACOff) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1372,7 +1332,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, AutoContributeWhenACOff) {
 // #6 - Tip verified publisher
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipVerifiedPublisher) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1386,7 +1346,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipVerifiedPublisher) {
 // #7 - Tip unverified publisher
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipUnverifiedPublisher) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1400,7 +1360,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipUnverifiedPublisher) {
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        RecurringTipForVerifiedPublisher) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1415,7 +1375,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        RecurringTipForUnverifiedPublisher) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1429,7 +1389,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 // Brave tip icon is injected when visiting Twitter
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TwitterTipsInjectedOnTwitter) {
   // Enable Rewards
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
 
   // Navigate to Twitter in a new tab
   GURL url = https_server()->GetURL("twitter.com", "/twitter");
@@ -1459,7 +1419,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        TwitterTipsInjectedOnOldTwitter) {
   // Enable Rewards
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
 
   // Navigate to Twitter in a new tab
   GURL url = https_server()->GetURL("twitter.com", "/oldtwitter");
@@ -1489,7 +1449,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        TwitterTipsNotInjectedOnNonTwitter) {
   // Enable Rewards
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
 
   // Navigate to a non-Twitter site in a new tab
   GURL url = https_server()->GetURL("brave.com", "/twitter");
@@ -1504,7 +1464,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 // Brave tip icon is injected when visiting Reddit
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, RedditTipsInjectedOnReddit) {
   // Enable Rewards
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
 
   // Navigate to Reddit in a new tab
   GURL url = https_server()->GetURL("reddit.com", "/reddit");
@@ -1533,7 +1493,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        RedditTipsNotInjectedOnNonReddit) {
   // Enable Rewards
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
 
   // Navigate to Reddit in a new tab
   GURL url = https_server()->GetURL("brave.com", "/reddit");
@@ -1548,7 +1508,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 // Brave tip icon is injected when visiting GitHub
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, GitHubTipsInjectedOnGitHub) {
   // Enable Rewards
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
 
   // Navigate to GitHub in a new tab
   GURL url = https_server()->GetURL("github.com", "/github");
@@ -1578,7 +1538,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        GitHubTipsNotInjectedOnNonGitHub) {
   // Enable Rewards
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
 
   // Navigate to GitHub in a new tab
   GURL url = https_server()->GetURL("brave.com", "/github");
@@ -1596,7 +1556,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
   const std::string publisher = "example.com";
 
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1620,7 +1580,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
     InsufficientNotificationForZeroAmountZeroPublishers) {
   AddNotificationServiceObserver();
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
   CheckInsufficientFundsForTesting();
   WaitForInsufficientFundsNotification();
   const brave_rewards::RewardsNotificationService::RewardsNotificationsMap&
@@ -1640,7 +1600,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        InsufficientNotificationForACNotEnoughFunds) {
   AddNotificationServiceObserver();
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   // Visit publishers
   const bool verified = true;
@@ -1669,7 +1629,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        InsufficientNotificationForInsufficientAmount) {
   AddNotificationServiceObserver();
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
   balance_ = promotion_->ClaimPromotionViaCode();
 
   TipViaCode(
@@ -1705,7 +1665,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
                        InsufficientNotificationForVerifiedInsufficientAmount) {
   AddNotificationServiceObserver();
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
   balance_ = promotion_->ClaimPromotionViaCode();
 
   TipViaCode(
@@ -1740,7 +1700,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 
 // Test whether rewards is disabled in private profile.
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PrefsTestInPrivateWindow) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
   EXPECT_TRUE(rewards_browsertest_util::IsRewardsEnabled(browser()));
   EXPECT_FALSE(rewards_browsertest_util::IsRewardsEnabled(browser(), true));
 }
@@ -1750,7 +1710,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
 
   response_->SetAlternativePublisherList(true);
 
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   contents()->GetController().Reload(content::ReloadType::NORMAL, true);
   EXPECT_TRUE(WaitForLoadStop(contents()));
@@ -1822,7 +1782,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDefaultMonthlyTipChoices) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1847,7 +1807,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDefaultMonthlyTipChoices) {
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, SiteBannerDefaultTipChoices) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   GURL url = https_server()->GetURL("3zsistemi.si", "/index.html");
   ui_test_utils::NavigateToURLWithDisposition(
@@ -1870,7 +1830,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, SiteBannerDefaultTipChoices) {
 IN_PROC_BROWSER_TEST_F(
     RewardsBrowserTest,
     SiteBannerDefaultPublisherAmounts) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   GURL url = https_server()->GetURL("laurenwags.github.io", "/index.html");
   ui_test_utils::NavigateToURLWithDisposition(
@@ -1885,7 +1845,7 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, NotVerifiedWallet) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   // Click on verify button
   rewards_browsertest_util::WaitForElementThenClick(
@@ -1926,7 +1886,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
   SetUpUpholdWallet(50.0);
 
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   const double amount = 5.0;
   const bool should_contribute = true;
@@ -1943,7 +1903,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
   SetUpUpholdWallet(50.0);
 
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   double total_amount = 0.0;
   const double amount = 5.0;
@@ -1978,7 +1938,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipConnectedPublisherAnon) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -1999,7 +1959,7 @@ IN_PROC_BROWSER_TEST_F(
   SetUpUpholdWallet(50.0);
 
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -2020,7 +1980,7 @@ IN_PROC_BROWSER_TEST_F(
   SetUpUpholdWallet(50.0, ledger::WalletStatus::CONNECTED);
 
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
   contents()->GetController().Reload(content::ReloadType::NORMAL, true);
   EXPECT_TRUE(WaitForLoadStop(contents()));
 
@@ -2050,7 +2010,7 @@ IN_PROC_BROWSER_TEST_F(
   SetUpUpholdWallet(50.0);
 
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
   contents()->GetController().Reload(content::ReloadType::NORMAL, true);
   EXPECT_TRUE(WaitForLoadStop(contents()));
 
@@ -2076,7 +2036,7 @@ IN_PROC_BROWSER_TEST_F(
 
 // Ensure that we can make a one-time tip of a non-integral amount.
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipNonIntegralAmount) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -2090,7 +2050,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, TipNonIntegralAmount) {
 
 // Ensure that we can make a recurring tip of a non-integral amount.
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, RecurringTipNonIntegralAmount) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -2108,7 +2068,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, RecurringTipNonIntegralAmount) {
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
     RecurringAndPartialAutoContribution) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -2150,7 +2110,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
     MultipleRecurringOverBudgetAndPartialAutoContribution) {
   // Enable Rewards
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   TipViaCode(
       "duckduckgo.com",
@@ -2212,7 +2172,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 IN_PROC_BROWSER_TEST_F(
   RewardsBrowserTest,
   NewTabPageWidgetEnableRewards) {
-  EnableRewards(true);
+  rewards_browsertest_helper::EnableRewards(browser(), true);
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDontDoRequests) {
@@ -2226,7 +2186,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDontDoRequests) {
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowMonthlyIfACOff) {
-  EnableRewardsViaCode();
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
   rewards_service_->SetAutoContributeEnabled(false);
 
   GURL url = https_server()->GetURL("3zsistemi.si", "/");
@@ -2245,7 +2205,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowMonthlyIfACOff) {
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowACPercentInThePanel) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   VisitPublisher("3zsistemi.si", true);
 
@@ -2271,7 +2231,7 @@ IN_PROC_BROWSER_TEST_F(
     SplitProcessorAutoContribution) {
   SetUpUpholdWallet(50.0);
 
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   balance_ = promotion_->ClaimPromotionViaCode();
 
@@ -2335,7 +2295,7 @@ IN_PROC_BROWSER_TEST_F(
     RewardsBrowserTest,
     PromotionHasEmptyPublicKey) {
   response_->SetPromotionEmptyKey(true);
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
 
   promotion_->WaitForPromotionInitialization();
   rewards_browsertest_util::WaitForElementToAppear(
@@ -2345,7 +2305,7 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, CheckIfReconcileWasReset) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
   uint64_t current_stamp = 0;
 
   base::RunLoop run_loop_first;
@@ -2375,7 +2335,7 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, CheckIfReconcileWasReset) {
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, CheckIfReconcileWasResetACOff) {
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
   uint64_t current_stamp = 0;
 
   rewards_service_->SetAutoContributeEnabled(false);
@@ -2407,7 +2367,7 @@ IN_PROC_BROWSER_TEST_F(
     RewardsBrowserTest,
     SplitProcessOneTimeTip) {
   SetUpUpholdWallet(50.0);
-  EnableRewards();
+  rewards_browsertest_helper::EnableRewards(browser());
   balance_ = promotion_->ClaimPromotionViaCode();
 
   TipPublisher(
