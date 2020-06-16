@@ -7,11 +7,25 @@
 
 #if !defined(OS_ANDROID)
 #include "brave/utility/importer/brave_profile_import_impl.h"
-#define ProfileImportImpl BraveProfileImportImpl
+
+namespace {
+
+auto RunBraveProfileImporter(
+    mojo::PendingReceiver<brave::mojom::ProfileImport> receiver) {
+  return std::make_unique<BraveProfileImportImpl>(std::move(receiver));
+}
+
+}  // namespace
+
+#endif
+
+#if defined(OS_ANDROID)
+#define BRAVE_GET_MAIN_THREAD_SERVICE_FACTORY
+#else
+#define BRAVE_GET_MAIN_THREAD_SERVICE_FACTORY \
+    RunBraveProfileImporter,
 #endif
 
 #include "../../../../chrome/utility/services.cc"
 
-#if !defined(OS_ANDROID)
-#undef ProfileImportImpl
-#endif
+#undef BRAVE_GET_MAIN_THREAD_SERVICE_FACTORY

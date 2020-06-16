@@ -1,12 +1,12 @@
 diff --git a/mojo/public/tools/bindings/chromium_bindings_configuration.gni b/mojo/public/tools/bindings/chromium_bindings_configuration.gni
-index 2eb03f7ff4ff96594c8a2dbec53413c8a7b03797..a3e52d14e45829170aa0d1ef8ebe989757b58083 100644
+index 2eb03f7ff4ff96594c8a2dbec53413c8a7b03797..de6b3b63708b000255d2c0224c08aca5c0c8ecbe 100644
 --- a/mojo/public/tools/bindings/chromium_bindings_configuration.gni
 +++ b/mojo/public/tools/bindings/chromium_bindings_configuration.gni
-@@ -4,6 +4,7 @@
+@@ -3,6 +3,7 @@
+ # found in the LICENSE file.
  
  _typemap_imports = [
++  "//brave/typemaps.gni",
    "//chrome/chrome_cleaner/mojom/typemaps/typemaps.gni",
-+  "//brave/common/tor/typemaps.gni",
    "//chrome/common/importer/typemaps.gni",
    "//chrome/common/media_router/mojom/typemaps.gni",
-   "//chrome/typemaps.gni",
