@@ -71,4 +71,20 @@ void EnableRewardsViaCode(
   ASSERT_TRUE(IsRewardsEnabled(browser));
 }
 
+GURL GetUrl(
+    net::EmbeddedTestServer* https_server,
+    const std::string& publisher_key) {
+  DCHECK(https_server);
+  return https_server->GetURL(publisher_key, "/index.html");
+}
+
+void ActivateTabAtIndex(
+    Browser* browser,
+    const int32_t index) {
+  DCHECK(browser);
+  browser->tab_strip_model()->ActivateTabAt(
+      index,
+      TabStripModel::UserGestureDetails(TabStripModel::GestureType::kOther));
+}
+
 }  // namespace rewards_browsertest_util

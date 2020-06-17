@@ -95,7 +95,7 @@ class RewardsPromotionBrowserTest
     promotion_->WaitForPromotionInitialization();
 
     // Use the appropriate WebContents
-    content::WebContents *contents = use_panel
+    content::WebContents* contents = use_panel
         ? rewards_browsertest_helper::OpenRewardsPopup(browser())
         : browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -173,6 +173,19 @@ IN_PROC_BROWSER_TEST_F(RewardsPromotionBrowserTest, ClaimViaPanel) {
 
   double balance = ClaimPromotion(true);
   ASSERT_EQ(balance, 30.0);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    RewardsPromotionBrowserTest,
+    PromotionHasEmptyPublicKey) {
+  response_->SetPromotionEmptyKey(true);
+  rewards_browsertest_helper::EnableRewards(browser());
+
+  promotion_->WaitForPromotionInitialization();
+  rewards_browsertest_util::WaitForElementToAppear(
+      rewards_browsertest_helper::OpenRewardsPopup(browser()),
+      "[data-test-id=notification-close]",
+      false);
 }
 
 }  // namespace rewards_browsertest

@@ -10,13 +10,13 @@
 #include "brave/common/extensions/extension_constants.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_helper.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_util.h"
-#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "brave/components/brave_rewards/common/pref_names.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "content/public/browser/notification_service.h"
 
 namespace rewards_browsertest_helper {
 
@@ -100,6 +100,97 @@ void EnableRewards(Browser* browser, const bool use_new_tab) {
   rewards_browsertest_util::WaitForElementToAppear(
       contents,
       "[data-test-id2='enableMain']");
+}
+
+content::WebContents* OpenSiteBanner(
+    Browser* browser,
+    rewards_browsertest_util::ContributionType banner_type) {
+  content::WebContents* popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser);
+
+  // Construct an observer to wait for the site banner to load.
+  content::WindowedNotificationObserver site_banner_observer(
+      content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
+      content::NotificationService::AllSources());
+
+  const std::string buttonSelector =
+      banner_type == rewards_browsertest_util::ContributionType::MonthlyTip
+      ? "[type='tip-monthly']"
+      : "[type='tip']";
+
+  // Click button to initiate sending a tip.
+  rewards_browsertest_util::WaitForElementThenClick(
+      popup_contents,
+      buttonSelector);
+
+  // Wait for the site banner to load
+  site_banner_observer.Wait();
+
+  // Retrieve the notification source
+  const auto& site_banner_source =
+      static_cast<const content::Source<content::WebContents>&>(
+          site_banner_observer.source());
+
+  // Allow the site banner to update its UI. We cannot use ExecJs here,
+  // because it does not resolve promises.
+  (void)EvalJs(site_banner_source.ptr(),
+      "new Promise(resolve => setTimeout(resolve, 0))",
+      content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+      content::ISOLATED_WORLD_ID_CONTENT_END);
+
+  return site_banner_source.ptr();
+}
+
+void VisitPublisher(
+    Browser* browser,
+    const GURL& url,
+    const bool verified,
+    const bool last_add) {
+  const std::string publisher = url.host();
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser,
+      url,
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // The minimum publisher duration when testing is 1 second (and the
+  // granularity is seconds), so wait for just over 2 seconds to elapse
+  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(2100));
+
+  // Activate the Rewards settings page tab
+  rewards_browsertest_util::ActivateTabAtIndex(browser, 0);
+
+  // Wait for publisher list normalization
+  // TODO WaitForPublisherListNormalized();
+
+  auto* contents = browser->tab_strip_model()->GetActiveWebContents();
+  // Make sure site appears in auto-contribute table
+  rewards_browsertest_util::WaitForElementToEqual(
+      contents,
+      "[data-test-id='ac_link_" + publisher + "']",
+      publisher);
+
+  if (verified) {
+    // A verified site has two images associated with it, the site's
+    // favicon and the verified icon
+    content::EvalJsResult js_result =
+        EvalJs(contents,
+              "document.querySelector(\"[data-test-id='ac_link_" +
+              publisher + "']\").getElementsByTagName('svg').length === 1;",
+              content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+              content::ISOLATED_WORLD_ID_CONTENT_END);
+    EXPECT_TRUE(js_result.ExtractBool());
+  } else {
+    // An unverified site has one image associated with it, the site's
+    // favicon
+    content::EvalJsResult js_result =
+        EvalJs(contents,
+              "document.querySelector(\"[data-test-id='ac_link_" +
+              publisher + "']\").getElementsByTagName('svg').length === 0;",
+              content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+              content::ISOLATED_WORLD_ID_CONTENT_END);
+    EXPECT_TRUE(js_result.ExtractBool());
+  }
 }
 
 }  // namespace rewards_browsertest_helper

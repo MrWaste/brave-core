@@ -10,9 +10,10 @@
 
 #include "base/files/file_path.h"
 #include "bat/ledger/internal/request/request_util.h"
-#include "chrome/browser/ui/browser.h"
-#include "url/gurl.h"
 #include "brave/components/brave_rewards/browser/rewards_service_impl.h"
+#include "chrome/browser/ui/browser.h"
+#include "net/test/embedded_test_server/default_handlers.h"
+#include "url/gurl.h"
 
 namespace rewards_browsertest_util {
 
@@ -31,6 +32,12 @@ GURL GetNewTabUrl();
 void EnableRewardsViaCode(
     Browser* browser,
     brave_rewards::RewardsServiceImpl* rewards_service);
+
+GURL GetUrl(
+    net::EmbeddedTestServer* https_server,
+    const std::string& publisher_key);
+
+void ActivateTabAtIndex(Browser* browser, const int index);
 
 }  // namespace rewards_browsertest_util
 

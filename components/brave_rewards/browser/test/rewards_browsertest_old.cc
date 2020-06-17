@@ -243,69 +243,12 @@ class RewardsBrowserTest
     return BalanceDoubleToString(balance_);
   }
 
-  GURL uphold_auth_url() {
-    GURL url("chrome://rewards/uphold/authorization?"
-             "code=0c42b34121f624593ee3b04cbe4cc6ddcd72d&state=123456789");
-    return url;
-  }
-
   content::WebContents* contents() const {
     return browser()->tab_strip_model()->GetActiveWebContents();
   }
 
   brave_rewards::RewardsServiceImpl* rewards_service() {
     return rewards_service_;
-  }
-
-  void VisitPublisher(const std::string& publisher,
-                      bool verified,
-                      bool last_add = false) {
-    GURL url = https_server()->GetURL(publisher, "/index.html");
-    ui_test_utils::NavigateToURLWithDisposition(
-        browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
-
-    // The minimum publisher duration when testing is 1 second (and the
-    // granularity is seconds), so wait for just over 2 seconds to elapse
-    base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(2100));
-
-    // Activate the Rewards settings page tab
-    ActivateTabAtIndex(0);
-
-    // Wait for publisher list normalization
-    WaitForPublisherListNormalized();
-
-    // Make sure site appears in auto-contribute table
-    rewards_browsertest_util::WaitForElementToEqual(
-        contents(),
-        "[data-test-id='ac_link_" + publisher + "']",
-        publisher);
-
-    if (verified) {
-      // A verified site has two images associated with it, the site's
-      // favicon and the verified icon
-      content::EvalJsResult js_result =
-          EvalJs(contents(),
-                "document.querySelector(\"[data-test-id='ac_link_" +
-                publisher + "']\").getElementsByTagName('svg').length === 1;",
-                content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
-                content::ISOLATED_WORLD_ID_CONTENT_END);
-      EXPECT_TRUE(js_result.ExtractBool());
-    } else {
-      // An unverified site has one image associated with it, the site's
-      // favicon
-      content::EvalJsResult js_result =
-          EvalJs(contents(),
-                "document.querySelector(\"[data-test-id='ac_link_" +
-                publisher + "']\").getElementsByTagName('svg').length === 0;",
-                content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
-                content::ISOLATED_WORLD_ID_CONTENT_END);
-      EXPECT_TRUE(js_result.ExtractBool());
-    }
-
-    if (last_add) {
-      last_publisher_added_ = true;
-    }
   }
 
   std::string RewardsPageTipSummaryAmount() const {
@@ -322,54 +265,10 @@ class RewardsBrowserTest
     return BalanceDoubleToString(-truncated_amount);
   }
 
-  void ActivateTabAtIndex(int index) const {
-    browser()->tab_strip_model()->ActivateTabAt(
-        index,
-        TabStripModel::UserGestureDetails(TabStripModel::GestureType::kOther));
-  }
-
   void RefreshPublisherListUsingRewardsPopup() const {
     rewards_browsertest_util::WaitForElementThenClick(
         rewards_browsertest_helper::OpenRewardsPopup(browser()),
         "[data-test-id='unverified-check-button']");
-  }
-
-  content::WebContents* OpenSiteBanner(
-      rewards_browsertest_util::ContributionType banner_type) const {
-    content::WebContents* popup_contents =
-        rewards_browsertest_helper::OpenRewardsPopup(browser());
-
-    // Construct an observer to wait for the site banner to load.
-    content::WindowedNotificationObserver site_banner_observer(
-        content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
-        content::NotificationService::AllSources());
-
-    const std::string buttonSelector =
-        banner_type == rewards_browsertest_util::ContributionType::MonthlyTip
-        ? "[type='tip-monthly']"
-        : "[type='tip']";
-
-    // Click button to initiate sending a tip.
-    rewards_browsertest_util::WaitForElementThenClick(
-        popup_contents,
-        buttonSelector);
-
-    // Wait for the site banner to load
-    site_banner_observer.Wait();
-
-    // Retrieve the notification source
-    const auto& site_banner_source =
-        static_cast<const content::Source<content::WebContents>&>(
-            site_banner_observer.source());
-
-    // Allow the site banner to update its UI. We cannot use ExecJs here,
-    // because it does not resolve promises.
-    (void)EvalJs(site_banner_source.ptr(),
-        "new Promise(resolve => setTimeout(resolve, 0))",
-        content::EXECUTE_SCRIPT_DEFAULT_OPTIONS,
-        content::ISOLATED_WORLD_ID_CONTENT_END);
-
-    return site_banner_source.ptr();
   }
 
   void TipPublisher(
@@ -388,7 +287,8 @@ class RewardsBrowserTest
         browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
         ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
-    content::WebContents* site_banner_contents = OpenSiteBanner(type);
+    content::WebContents* site_banner_contents =
+        rewards_browsertest_helper::OpenSiteBanner(browser(), type);
     ASSERT_TRUE(site_banner_contents);
 
     auto tip_options = rewards_browsertest_util::GetSiteBannerTipOptions(
@@ -1113,15 +1013,6 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
       publisher);
 }
 
-
-
-// Test whether rewards is disabled in private profile.
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PrefsTestInPrivateWindow) {
-  rewards_browsertest_helper::EnableRewards(browser());
-  EXPECT_TRUE(rewards_browsertest_util::IsRewardsEnabled(browser()));
-  EXPECT_FALSE(rewards_browsertest_util::IsRewardsEnabled(browser(), true));
-}
-
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
   response_->SetAlternativePublisherList(true);
 
@@ -1194,106 +1085,6 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ProcessPendingContributions) {
       popup_contents,
       "#root",
       "3zsistemi.si");
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDefaultMonthlyTipChoices) {
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  balance_ = promotion_->ClaimPromotionViaCode();
-
-  GURL url = https_server()->GetURL("3zsistemi.si", "/index.html");
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
-
-  // Add a recurring tip of 10 BAT.
-  TipViaCode(
-      "3zsistemi.si",
-      10.0,
-      ledger::PublisherStatus::VERIFIED,
-      false,
-      true);
-
-  content::WebContents* popup =
-      rewards_browsertest_helper::OpenRewardsPopup(browser());
-  const auto tip_options = rewards_browsertest_util::GetRewardsPopupTipOptions(
-      popup);
-  ASSERT_EQ(tip_options, std::vector<double>({ 0, 1, 10, 100 }));
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, SiteBannerDefaultTipChoices) {
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  GURL url = https_server()->GetURL("3zsistemi.si", "/index.html");
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
-
-  content::WebContents* site_banner =
-      OpenSiteBanner(rewards_browsertest_util::ContributionType::OneTimeTip);
-  auto tip_options = rewards_browsertest_util::GetSiteBannerTipOptions(
-      site_banner);
-  ASSERT_EQ(tip_options, std::vector<double>({ 1, 5, 50 }));
-
-  site_banner = OpenSiteBanner(
-      rewards_browsertest_util::ContributionType::MonthlyTip);
-  tip_options = rewards_browsertest_util::GetSiteBannerTipOptions(
-      site_banner);
-  ASSERT_EQ(tip_options, std::vector<double>({ 1, 10, 100 }));
-}
-
-IN_PROC_BROWSER_TEST_F(
-    RewardsBrowserTest,
-    SiteBannerDefaultPublisherAmounts) {
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  GURL url = https_server()->GetURL("laurenwags.github.io", "/index.html");
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
-
-  content::WebContents* site_banner =
-      OpenSiteBanner(rewards_browsertest_util::ContributionType::OneTimeTip);
-  const auto tip_options = rewards_browsertest_util::GetSiteBannerTipOptions(
-      site_banner);
-  ASSERT_EQ(tip_options, std::vector<double>({ 5, 10, 20 }));
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, NotVerifiedWallet) {
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  // Click on verify button
-  rewards_browsertest_util::WaitForElementThenClick(
-      contents(),
-      "#verify-wallet-button");
-
-  // Click on verify button in on boarding
-  rewards_browsertest_util::WaitForElementThenClick(
-      contents(),
-      "#on-boarding-verify-button");
-
-  // Check if we are redirected to uphold
-  {
-    const GURL current_url = contents()->GetURL();
-    ASSERT_TRUE(base::StartsWith(
-        current_url.spec(),
-        braveledger_uphold::GetUrl() + "/authorize/",
-        base::CompareCase::INSENSITIVE_ASCII));
-  }
-
-  // Fake successful authentication
-  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
-        browser(),
-        uphold_auth_url(), 1);
-
-  // Check if we are redirected to KYC page
-  {
-    const GURL current_url = contents()->GetURL();
-    ASSERT_TRUE(base::StartsWith(
-        current_url.spec(),
-        braveledger_uphold::GetUrl() + "/signup/step2",
-        base::CompareCase::INSENSITIVE_ASCII));
-  }
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
@@ -1585,63 +1376,6 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(
-  RewardsBrowserTest,
-  NewTabPageWidgetEnableRewards) {
-  rewards_browsertest_helper::EnableRewards(browser(), true);
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDontDoRequests) {
-  // Open the Rewards popup
-  content::WebContents *popup_contents =
-      rewards_browsertest_helper::OpenRewardsPopup(browser());
-  ASSERT_TRUE(popup_contents);
-
-  // Make sure that no request was made
-  ASSERT_FALSE(response_->WasRequestMade());
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowMonthlyIfACOff) {
-  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service());
-  rewards_service_->SetAutoContributeEnabled(false);
-
-  GURL url = https_server()->GetURL("3zsistemi.si", "/");
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
-
-  // Open the Rewards popup
-  content::WebContents *popup_contents =
-      rewards_browsertest_helper::OpenRewardsPopup(browser());
-  ASSERT_TRUE(popup_contents);
-
-  rewards_browsertest_util::WaitForElementToAppear(
-      popup_contents,
-      "#panel-donate-monthly");
-}
-
-IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowACPercentInThePanel) {
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  VisitPublisher("3zsistemi.si", true);
-
-  GURL url = https_server()->GetURL("3zsistemi.si", "/");
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
-
-  // Open the Rewards popup
-  content::WebContents *popup_contents =
-      rewards_browsertest_helper::OpenRewardsPopup(browser());
-  ASSERT_TRUE(popup_contents);
-
-  const std::string score =
-      rewards_browsertest_util::WaitForElementThenGetContent(
-          popup_contents,
-          "[data-test-id='attention-score']");
-  EXPECT_NE(score.find("100%"), std::string::npos);
-}
-
-IN_PROC_BROWSER_TEST_F(
     RewardsBrowserTest,
     SplitProcessorAutoContribution) {
   SetUpUpholdWallet(50.0);
@@ -1704,19 +1438,6 @@ IN_PROC_BROWSER_TEST_F(
       contents(),
       "[color=contribute]",
       "-50.000BAT");
-}
-
-IN_PROC_BROWSER_TEST_F(
-    RewardsBrowserTest,
-    PromotionHasEmptyPublicKey) {
-  response_->SetPromotionEmptyKey(true);
-  rewards_browsertest_helper::EnableRewards(browser());
-
-  promotion_->WaitForPromotionInitialization();
-  rewards_browsertest_util::WaitForElementToAppear(
-      rewards_browsertest_helper::OpenRewardsPopup(browser()),
-      "[data-test-id=notification-close]",
-      false);
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, CheckIfReconcileWasReset) {

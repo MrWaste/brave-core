@@ -9,8 +9,10 @@
 #include <string>
 #include <vector>
 
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
+#include "url/gurl.h"
 
 namespace content {
 class WebContents;
@@ -21,6 +23,16 @@ namespace rewards_browsertest_helper {
 content::WebContents* OpenRewardsPopup(Browser* browser);
 
 void EnableRewards(Browser* browser, const bool use_new_tab = false);
+
+content::WebContents* OpenSiteBanner(
+    Browser* browser,
+    rewards_browsertest_util::ContributionType banner_type);
+
+void VisitPublisher(
+    Browser* browser,
+    const GURL& url,
+    const bool verified,
+    const bool last_add = false);
 
 }  // namespace rewards_browsertest_helper
 

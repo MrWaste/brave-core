@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "bat/ledger/internal/uphold/uphold_util.h"
 #include "brave/browser/brave_rewards/rewards_service_factory.h"
 #include "brave/common/brave_paths.h"
 #include "brave/components/brave_rewards/browser/rewards_service_impl.h"
@@ -14,10 +15,13 @@
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_network_util.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_observer.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_response.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
+#include "components/network_session_configurator/common/network_switches.h"
 
 // npm run test -- brave_browser_tests --filter=RewardsBrowserTest.*
 
@@ -71,6 +75,12 @@ class RewardsBrowserTest
     InProcessBrowserTest::TearDown();
   }
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // HTTPS server only serves a valid cert for localhost, so this is needed
+    // to load pages from other hosts without an error
+    command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
+  }
+
   void GetTestResponse(
       const std::string& url,
       int32_t method,
@@ -86,6 +96,12 @@ class RewardsBrowserTest
 
   content::WebContents* contents() const {
     return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+
+  GURL uphold_auth_url() {
+    GURL url("chrome://rewards/uphold/authorization?"
+             "code=0c42b34121f624593ee3b04cbe4cc6ddcd72d&state=123456789");
+    return url;
   }
 
   std::unique_ptr<RewardsBrowserTestResponse> response_;
@@ -164,6 +180,177 @@ IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ToggleAutoContribute) {
       "[data-test-id2='autoContribution']",
       "data-toggled");
   ASSERT_STREQ(value.c_str(), "true");
+}
+
+IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PrefsTestInPrivateWindow) {
+  rewards_browsertest_helper::EnableRewards(browser());
+  EXPECT_TRUE(rewards_browsertest_util::IsRewardsEnabled(browser()));
+  EXPECT_FALSE(rewards_browsertest_util::IsRewardsEnabled(browser(), true));
+}
+
+//IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDefaultMonthlyTipChoices) {
+//  rewards_browsertest_helper::EnableRewards(browser());
+//
+//  balance_ = promotion_->ClaimPromotionViaCode();
+//
+//  GURL url = https_server_->GetURL("3zsistemi.si", "/index.html");
+//  ui_test_utils::NavigateToURLWithDisposition(
+//      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+//      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+//
+//  // Add a recurring tip of 10 BAT.
+//  TipViaCode(
+//      "3zsistemi.si",
+//      10.0,
+//      ledger::PublisherStatus::VERIFIED,
+//      false,
+//      true);
+//
+//  content::WebContents* popup =
+//      rewards_browsertest_helper::OpenRewardsPopup(browser());
+//  const auto tip_options = rewards_browsertest_util::GetRewardsPopupTipOptions(
+//      popup);
+//  ASSERT_EQ(tip_options, std::vector<double>({ 0, 1, 10, 100 }));
+//}
+
+IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, SiteBannerDefaultTipChoices) {
+  rewards_browsertest_helper::EnableRewards(browser());
+
+  GURL url = https_server_->GetURL("3zsistemi.si", "/index.html");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  content::WebContents* site_banner =
+      rewards_browsertest_helper::OpenSiteBanner(
+          browser(),
+          rewards_browsertest_util::ContributionType::OneTimeTip);
+  auto tip_options = rewards_browsertest_util::GetSiteBannerTipOptions(
+      site_banner);
+  ASSERT_EQ(tip_options, std::vector<double>({ 1, 5, 50 }));
+
+  site_banner = rewards_browsertest_helper::OpenSiteBanner(
+      browser(),
+      rewards_browsertest_util::ContributionType::MonthlyTip);
+  tip_options = rewards_browsertest_util::GetSiteBannerTipOptions(
+      site_banner);
+  ASSERT_EQ(tip_options, std::vector<double>({ 1, 10, 100 }));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    RewardsBrowserTest,
+    SiteBannerDefaultPublisherAmounts) {
+  rewards_browsertest_helper::EnableRewards(browser());
+
+  GURL url = https_server_->GetURL("laurenwags.github.io", "/index.html");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  content::WebContents* site_banner =
+      rewards_browsertest_helper::OpenSiteBanner(
+          browser(),
+          rewards_browsertest_util::ContributionType::OneTimeTip);
+  const auto tip_options = rewards_browsertest_util::GetSiteBannerTipOptions(
+      site_banner);
+  ASSERT_EQ(tip_options, std::vector<double>({ 5, 10, 20 }));
+}
+
+IN_PROC_BROWSER_TEST_F(
+  RewardsBrowserTest,
+  NewTabPageWidgetEnableRewards) {
+  rewards_browsertest_helper::EnableRewards(browser(), true);
+}
+
+IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, NotVerifiedWallet) {
+  rewards_browsertest_helper::EnableRewards(browser());
+
+  // Click on verify button
+  rewards_browsertest_util::WaitForElementThenClick(
+      contents(),
+      "#verify-wallet-button");
+
+  // Click on verify button in on boarding
+  rewards_browsertest_util::WaitForElementThenClick(
+      contents(),
+      "#on-boarding-verify-button");
+
+  // Check if we are redirected to uphold
+  {
+    const GURL current_url = contents()->GetURL();
+    ASSERT_TRUE(base::StartsWith(
+        current_url.spec(),
+        braveledger_uphold::GetUrl() + "/authorize/",
+        base::CompareCase::INSENSITIVE_ASCII));
+  }
+
+  // Fake successful authentication
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+        browser(),
+        uphold_auth_url(), 1);
+
+  // Check if we are redirected to KYC page
+  {
+    const GURL current_url = contents()->GetURL();
+    ASSERT_TRUE(base::StartsWith(
+        current_url.spec(),
+        braveledger_uphold::GetUrl() + "/signup/step2",
+        base::CompareCase::INSENSITIVE_ASCII));
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, PanelDontDoRequests) {
+  // Open the Rewards popup
+  content::WebContents* popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
+  ASSERT_TRUE(popup_contents);
+
+  // Make sure that no request was made
+  ASSERT_FALSE(response_->WasRequestMade());
+}
+
+IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowMonthlyIfACOff) {
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service_);
+  rewards_service_->SetAutoContributeEnabled(false);
+
+  GURL url = https_server_->GetURL("3zsistemi.si", "/");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Open the Rewards popup
+  content::WebContents* popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
+  ASSERT_TRUE(popup_contents);
+
+  rewards_browsertest_util::WaitForElementToAppear(
+      popup_contents,
+      "#panel-donate-monthly");
+}
+
+IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, ShowACPercentInThePanel) {
+  rewards_browsertest_helper::EnableRewards(browser());
+
+  rewards_browsertest_helper::VisitPublisher(
+      browser(),
+      rewards_browsertest_util::GetUrl(https_server_.get(), "3zsistemi.si"),
+      true);
+
+  GURL url = https_server_->GetURL("3zsistemi.si", "/");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Open the Rewards popup
+  content::WebContents* popup_contents =
+      rewards_browsertest_helper::OpenRewardsPopup(browser());
+  ASSERT_TRUE(popup_contents);
+
+  const std::string score =
+      rewards_browsertest_util::WaitForElementThenGetContent(
+          popup_contents,
+          "[data-test-id='attention-score']");
+  EXPECT_NE(score.find("100%"), std::string::npos);
 }
 
 }  // namespace rewards_browsertest

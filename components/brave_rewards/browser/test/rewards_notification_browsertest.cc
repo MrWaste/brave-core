@@ -5,6 +5,7 @@
 
 #include "brave/components/brave_rewards/browser/rewards_notification_service.h"
 #include "brave/components/brave_rewards/browser/rewards_notification_service_observer.h"
+#include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_context_helper.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_util.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_network_util.h"
 #include "brave/components/brave_rewards/browser/test/common/rewards_browsertest_observer.h"
@@ -17,6 +18,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
+#include "components/network_session_configurator/common/network_switches.h"
 
 // npm run test -- brave_browser_tests --filter=RewardsNotificationBrowserTest.*
 namespace rewards_browsertest {
@@ -72,6 +74,12 @@ class RewardsNotificationBrowserTest
 
   void TearDown() override {
     InProcessBrowserTest::TearDown();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // HTTPS server only serves a valid cert for localhost, so this is needed
+    // to load pages from other hosts without an error
+    command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
   void GetTestResponse(
@@ -307,35 +315,45 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_FALSE(is_showing_notification);
 }
 
+
+IN_PROC_BROWSER_TEST_F(
+    RewardsNotificationBrowserTest,
+    InsufficientNotificationForACNotEnoughFunds) {
+  rewards_browsertest_helper::EnableRewards(browser());
+
+  // Visit publishers
+  const bool verified = true;
+  rewards_browsertest_helper::VisitPublisher(
+      browser(),
+      rewards_browsertest_util::GetUrl(https_server_.get(), "duckduckgo.com"),
+      verified);
+  rewards_browsertest_helper::VisitPublisher(
+      browser(),
+      rewards_browsertest_util::GetUrl(https_server_.get(), "bumpsmack.com"),
+      verified);
+  rewards_browsertest_helper::VisitPublisher(
+      browser(),
+      rewards_browsertest_util::GetUrl(https_server_.get(), "brave.com"),
+      !verified,
+      true);
+
+  CheckInsufficientFundsForTesting();
+  WaitForInsufficientFundsNotification();
+  const brave_rewards::RewardsNotificationService::RewardsNotificationsMap&
+      notifications = rewards_service_->GetAllNotifications();
+
+  if (notifications.empty()) {
+    SUCCEED();
+    return;
+  }
+
+  bool is_showing_notification = IsShowingNotificationForType(
+      RewardsNotificationType::REWARDS_NOTIFICATION_INSUFFICIENT_FUNDS);
+
+  EXPECT_FALSE(is_showing_notification);
+}
+
 // TODO
-//IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
-//                       InsufficientNotificationForACNotEnoughFunds) {
-//  rewards_browsertest_helper::EnableRewards(browser());
-//
-//  // Visit publishers
-//  const bool verified = true;
-//  while (!last_publisher_added_) {
-//    VisitPublisher("duckduckgo.com", verified);
-//    VisitPublisher("bumpsmack.com", verified);
-//    VisitPublisher("brave.com", !verified, true);
-//  }
-//
-//  CheckInsufficientFundsForTesting();
-//  WaitForInsufficientFundsNotification();
-//  const brave_rewards::RewardsNotificationService::RewardsNotificationsMap&
-//      notifications = rewards_service_->GetAllNotifications();
-//
-//  if (notifications.empty()) {
-//    SUCCEED();
-//    return;
-//  }
-//
-//  bool is_showing_notification = IsShowingNotificationForType(
-//      RewardsNotificationType::REWARDS_NOTIFICATION_INSUFFICIENT_FUNDS);
-//
-//  EXPECT_FALSE(is_showing_notification);
-//}
-//
 //IN_PROC_BROWSER_TEST_F(RewardsBrowserTest,
 //                       InsufficientNotificationForInsufficientAmount) {
 //  rewards_browsertest_helper::EnableRewards(browser());

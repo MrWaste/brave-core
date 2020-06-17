@@ -20,6 +20,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
+#include "components/network_session_configurator/common/network_switches.h"
 
 // npm run test -- brave_browser_tests --filter=RewardsPublisherBrowserTest.*
 
@@ -71,6 +72,12 @@ class RewardsPublisherBrowserTest
 
   void TearDown() override {
     InProcessBrowserTest::TearDown();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // HTTPS server only serves a valid cert for localhost, so this is needed
+    // to load pages from other hosts without an error
+    command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
   void GetTestResponse(
@@ -134,19 +141,24 @@ IN_PROC_BROWSER_TEST_F(
   }
 }
 
-// TODO
-//IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitVerifiedPublisher) {
-//  // Enable Rewards
-//  rewards_browsertest_helper::EnableRewards(browser());
-//
-//  VisitPublisher("duckduckgo.com", true);
-//}
-//
-//IN_PROC_BROWSER_TEST_F(RewardsBrowserTest, VisitUnverifiedPublisher) {
-//  // Enable Rewards
-//  rewards_browsertest_helper::EnableRewards(browser());
-//
-//  VisitPublisher("brave.com", false);
-//}
+IN_PROC_BROWSER_TEST_F(RewardsPublisherBrowserTest, VisitVerifiedPublisher) {
+  // Enable Rewards
+  rewards_browsertest_helper::EnableRewards(browser());
+
+  rewards_browsertest_helper::VisitPublisher(
+      browser(),
+      rewards_browsertest_util::GetUrl(https_server_.get(), "duckduckgo.com"),
+      true);
+}
+
+IN_PROC_BROWSER_TEST_F(RewardsPublisherBrowserTest, VisitUnverifiedPublisher) {
+  // Enable Rewards
+  rewards_browsertest_helper::EnableRewards(browser());
+
+  rewards_browsertest_helper::VisitPublisher(
+      browser(),
+      rewards_browsertest_util::GetUrl(https_server_.get(), "brave.com"),
+      false);
+}
 
 }  // namespace rewards_browsertest
