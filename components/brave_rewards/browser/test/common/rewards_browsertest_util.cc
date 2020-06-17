@@ -87,4 +87,12 @@ void ActivateTabAtIndex(
       TabStripModel::UserGestureDetails(TabStripModel::GestureType::kOther));
 }
 
+std::string BalanceDoubleToString(double amount) {
+  return base::StringPrintf("%.3f", amount);
+}
+
+std::string GetUpholdExternalAddress() {
+  return "abe5f454-fedd-4ea9-9203-470ae7315bb3";
+}
+
 }  // namespace rewards_browsertest_util

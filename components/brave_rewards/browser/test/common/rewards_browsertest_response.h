@@ -33,7 +33,7 @@ class RewardsBrowserTestResponse {
 
   void SetAlternativePublisherList(const bool alternative);
 
-  void SetUpholdAddress(const std::string& address);
+  std::string GetUpholdAddress();
 
   void SetVerifiedWallet(const bool verified);
 
@@ -58,7 +58,6 @@ class RewardsBrowserTestResponse {
   bool empty_promotion_key_ = false;
   bool alternative_publisher_list_ = false;
   ledger::SKUOrderPtr order_;
-  std::string external_wallet_address_;
   bool verified_wallet_ = false;
   std::string external_balance_;
 };

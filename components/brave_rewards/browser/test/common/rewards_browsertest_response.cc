@@ -225,7 +225,7 @@ void RewardsBrowserTestResponse::Get(
     } else {
       *response = rewards_browsertest_util::GetUpholdCard(
           external_balance_,
-          external_wallet_address_);
+          rewards_browsertest_util::GetUpholdExternalAddress());
     }
     return;
   }
@@ -278,10 +278,6 @@ void RewardsBrowserTestResponse::SetPromotionEmptyKey(bool empty) {
 
 void RewardsBrowserTestResponse::SetAlternativePublisherList(bool alternative) {
   alternative_publisher_list_ = alternative;
-}
-
-void RewardsBrowserTestResponse::SetUpholdAddress(const std::string& address) {
-  external_wallet_address_ = address;
 }
 
 void RewardsBrowserTestResponse::SetVerifiedWallet(const bool verified) {

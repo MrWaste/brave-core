@@ -39,6 +39,10 @@ GURL GetUrl(
 
 void ActivateTabAtIndex(Browser* browser, const int index);
 
+std::string BalanceDoubleToString(double amount);
+
+std::string GetUpholdExternalAddress();
+
 }  // namespace rewards_browsertest_util
 
 #endif  // BRAVE_COMPONENTS_BRAVE_REWARDS_BROWSER_TEST_COMMON_REWARDS_BROWSERTEST_UTIL_H_

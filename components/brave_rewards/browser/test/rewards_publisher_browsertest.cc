@@ -93,6 +93,10 @@ class RewardsPublisherBrowserTest
         response);
   }
 
+  content::WebContents* contents() {
+    return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+
   std::unique_ptr<RewardsBrowserTestResponse> response_;
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
   brave_rewards::RewardsServiceImpl* rewards_service_;
@@ -142,7 +146,6 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsPublisherBrowserTest, VisitVerifiedPublisher) {
-  // Enable Rewards
   rewards_browsertest_helper::EnableRewards(browser());
 
   rewards_browsertest_helper::VisitPublisher(
@@ -152,13 +155,183 @@ IN_PROC_BROWSER_TEST_F(RewardsPublisherBrowserTest, VisitVerifiedPublisher) {
 }
 
 IN_PROC_BROWSER_TEST_F(RewardsPublisherBrowserTest, VisitUnverifiedPublisher) {
-  // Enable Rewards
   rewards_browsertest_helper::EnableRewards(browser());
 
   rewards_browsertest_helper::VisitPublisher(
       browser(),
       rewards_browsertest_util::GetUrl(https_server_.get(), "brave.com"),
       false);
+}
+
+// Brave tip icon is injected when visiting Twitter
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    TwitterTipsInjectedOnTwitter) {
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service_);
+
+  // Navigate to Twitter in a new tab
+  GURL url = https_server_->GetURL("twitter.com", "/twitter");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media tips injection is active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), true);
+}
+
+// Brave tip icon is not injected when visiting Twitter while Brave
+// Rewards is disabled
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    TwitterTipsNotInjectedWhenRewardsDisabled) {
+  // Navigate to Twitter in a new tab
+  GURL url = https_server_->GetURL("twitter.com", "/twitter");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media tips injection is not active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), false);
+}
+
+// Brave tip icon is injected when visiting old Twitter
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    TwitterTipsInjectedOnOldTwitter) {
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service_);
+
+  // Navigate to Twitter in a new tab
+  GURL url = https_server_->GetURL("twitter.com", "/oldtwitter");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media tips injection is active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), true);
+}
+
+// Brave tip icon is not injected when visiting old Twitter while
+// Brave Rewards is disabled
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    TwitterTipsNotInjectedWhenRewardsDisabledOldTwitter) {
+  // Navigate to Twitter in a new tab
+  GURL url = https_server_->GetURL("twitter.com", "/oldtwitter");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media tips injection is not active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), false);
+}
+
+// Brave tip icon is not injected into non-Twitter sites
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    TwitterTipsNotInjectedOnNonTwitter) {
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service_);
+
+  // Navigate to a non-Twitter site in a new tab
+  GURL url = https_server_->GetURL("brave.com", "/twitter");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media tips injection is not active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), false);
+}
+
+// Brave tip icon is injected when visiting Reddit
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    RedditTipsInjectedOnReddit) {
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service_);
+
+  // Navigate to Reddit in a new tab
+  GURL url = https_server_->GetURL("reddit.com", "/reddit");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media Tips injection is active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), true);
+}
+
+// Brave tip icon is not injected when visiting Reddit
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    RedditTipsNotInjectedWhenRewardsDisabled) {
+  // Navigate to Reddit in a new tab
+  GURL url = https_server_->GetURL("reddit.com", "/reddit");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media Tips injection is not active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), false);
+}
+
+// Brave tip icon is not injected when visiting Reddit
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    RedditTipsNotInjectedOnNonReddit) {
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service_);
+
+  // Navigate to Reddit in a new tab
+  GURL url = https_server_->GetURL("brave.com", "/reddit");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media Tips injection is not active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), false);
+}
+
+// Brave tip icon is injected when visiting GitHub
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    GitHubTipsInjectedOnGitHub) {
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service_);
+
+  // Navigate to GitHub in a new tab
+  GURL url = https_server_->GetURL("github.com", "/github");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media Tips injection is active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), true);
+}
+
+// Brave tip icon is not injected when visiting GitHub while Brave
+// Rewards is disabled
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    GitHubTipsNotInjectedWhenRewardsDisabled) {
+  // Navigate to GitHub in a new tab
+  GURL url = https_server_->GetURL("github.com", "/github");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media Tips injection is not active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), false);
+}
+
+// Brave tip icon is not injected when not visiting GitHub
+IN_PROC_BROWSER_TEST_F(
+    RewardsPublisherBrowserTest,
+    GitHubTipsNotInjectedOnNonGitHub) {
+  rewards_browsertest_util::EnableRewardsViaCode(browser(), rewards_service_);
+
+  // Navigate to GitHub in a new tab
+  GURL url = https_server_->GetURL("brave.com", "/github");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Ensure that Media Tips injection is not active
+  rewards_browsertest_util::IsMediaTipsInjected(contents(), false);
 }
 
 }  // namespace rewards_browsertest

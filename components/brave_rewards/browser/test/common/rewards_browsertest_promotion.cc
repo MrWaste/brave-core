@@ -28,6 +28,7 @@ void RewardsBrowserTestPromotion::WaitForPromotionInitialization() {
   if (initialized_) {
     return;
   }
+
   wait_for_initialization_loop_.reset(new base::RunLoop);
   wait_for_initialization_loop_->Run();
 }
